@@ -8,7 +8,6 @@ import base64, io, re, urllib.parse, datetime
 import streamlit as st
 import pandas as pd
 
-
 from api_client import *
 
 # ── PAGE CONFIG ───────────────────────────────────────────────────────────────
@@ -89,28 +88,142 @@ def safe_float(v, d=0.0):
     try: return float(str(v).replace(",","").strip() or d)
     except: return d
 
-def wa_link(bill, store_name, phone):
+def build_stores_pdf(df) -> bytes:
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import cm
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            leftMargin=1*cm, rightMargin=1*cm,
+                            topMargin=1.5*cm, bottomMargin=1*cm)
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("Shopkeeper Report", styles["Title"]))
+    story.append(Paragraph(f"Generated: {datetime.date.today().strftime('%d %b %Y')}", styles["Normal"]))
+    story.append(Spacer(1, 0.4*cm))
+
+    cols = list(df.columns)
+    data = [cols] + df.astype(str).values.tolist()
+
+    col_widths = [2.2*cm, 3*cm, 2.5*cm, 1.8*cm, 1.8*cm, 1.5*cm, 2.8*cm, 2.2*cm, 2.2*cm, 2.5*cm]
+    col_widths = col_widths[:len(cols)]
+
+    t = Table(data, colWidths=col_widths, repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND",  (0,0), (-1,0),  colors.HexColor("#1A237E")),
+        ("TEXTCOLOR",   (0,0), (-1,0),  colors.white),
+        ("FONTNAME",    (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",    (0,0), (-1,0),  8),
+        ("ALIGN",       (0,0), (-1,-1), "CENTER"),
+        ("FONTSIZE",    (0,1), (-1,-1), 7.5),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#F3F4F9")]),
+        ("GRID",        (0,0), (-1,-1), 0.4, colors.HexColor("#CCCCCC")),
+        ("TOPPADDING",  (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 4),
+    ]))
+    story.append(t)
+    doc.build(story)
+    return buf.getvalue()
+
+def wa_link(bill, store_name, phone, store_profile=None):
+    sp = store_profile or {}
+    store_ph    = sp.get("phone","") or ""
+    store_addr  = sp.get("address","") or ""
+    store_gstin = sp.get("gstin","") or ""
+    upi_id      = sp.get("upi_id","") or ""
+
+    sep = "─" * 28
+
     items_txt = ""
     for it in bill.get("items",[]):
-        items_txt += f"  {it.get('product_name','')} ({it.get('size','')}) x{it.get('qty',1)} = Rs.{safe_float(it.get('subtotal',0)):.2f}\n"
+        name = it.get("product_name","")[:20]
+        sz   = it.get("size","")
+        qty  = it.get("qty",1)
+        sub  = safe_float(it.get("subtotal",0))
+        items_txt += f"  {name} ({sz}) ×{qty} = Rs.{sub:.0f}\n"
+
     disc_line = ""
     if safe_float(bill.get("discount",0)) > 0:
         dt = "%" if bill.get("discount_type","").startswith("%") else "Rs."
-        disc_line = f"Discount({dt}): -Rs.{safe_float(bill['discount']):.2f}\n"
-    msg = (f"Receipt - {store_name}\n\nBill No: {bill['bill_no']}\n"
-           f"Date: {bill['bill_date']} {bill['bill_time']}\n"
-           f"Customer: {bill.get('customer_name','Walk-in')}\n\nItems:\n{items_txt}\n"
-           f"Subtotal : Rs.{safe_float(bill['subtotal']):.2f}\n{disc_line}"
-           f"GST      : Rs.{safe_float(bill['gst_total']):.2f}\n"
-           f"TOTAL    : Rs.{safe_float(bill['grand_total']):.2f}\n"
-           f"Payment  : {bill.get('payment_mode','')}\n"
-           f"Paid     : Rs.{safe_float(bill['amount_paid']):.2f}\n")
+        disc_line = f"  Discount({dt})  : -Rs.{safe_float(bill['discount']):.0f}\n"
+
+    upi_line = ""
+    if upi_id:
+        upi_line = (
+            f"\n{sep}\n"
+            f"💳 *Pay via UPI:*\n"
+            f"  UPI ID : {upi_id}\n"
+            f"  Amount : Rs.{int(safe_float(bill['grand_total']))}\n"
+            f"  Ref    : {bill['bill_no']}\n"
+        )
+
+    msg = (
+        f"🧾 *Receipt — {store_name}*\n"
+        f"{sep}\n"
+    )
+    if store_addr:
+        msg += f"📍 {store_addr}\n"
+    if store_ph:
+        msg += f"📞 {store_ph}"
+    if store_gstin:
+        msg += f"  |  GST: {store_gstin}"
+    if store_ph or store_gstin:
+        msg += "\n"
+
+    msg += (
+        f"{sep}\n"
+        f"📄 *Bill No:* {bill['bill_no']}\n"
+        f"📅 Date  : {bill['bill_date']}  {bill['bill_time']}\n"
+        f"👤 Cust  : {bill.get('customer_name','Walk-in')}\n"
+        f"{sep}\n"
+        f"*ITEMS:*\n"
+        f"{items_txt}"
+        f"{sep}\n"
+        f"  Subtotal : Rs.{safe_float(bill['subtotal']):.0f}\n"
+        f"{disc_line}"
+        f"  GST      : Rs.{safe_float(bill['gst_total']):.0f}\n"
+        f"  *TOTAL   : Rs.{int(safe_float(bill['grand_total']))}*\n"
+        f"{sep}\n"
+        f"  Payment  : {bill.get('payment_mode','')}\n"
+        f"  Paid     : Rs.{safe_float(bill['amount_paid']):.0f}\n"
+    )
     if safe_float(bill.get("change_amt",0)) > 0:
-        msg += f"Change   : Rs.{safe_float(bill['change_amt']):.2f}\n"
-    msg += "\nThank you! Visit again."
+        msg += f"  Change   : Rs.{safe_float(bill['change_amt']):.0f}\n"
+
+    msg += upi_line
+    msg += f"\n{sep}\n🙏 *Thank you! Visit again.*\n_Exchange within 7 days with receipt_"
+
     ph = re.sub(r"\D","",str(phone))
     if len(ph)==10: ph="91"+ph
     return f"https://wa.me/{ph}?text={urllib.parse.quote(msg)}"
+
+
+def _upi_qr_html(upi_id, store_name, amount, bill_no, size_px=140):
+    try:
+        import qrcode
+        upi_url = (
+            f"upi://pay?pa={upi_id}&pn={urllib.parse.quote(store_name)}"
+            f"&am={int(amount)}&cu=INR&tn=Bill%20{bill_no}"
+        )
+        qr  = qrcode.make(upi_url)
+        buf = io.BytesIO()
+        qr.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        return (
+            f"<div style='text-align:center;margin:8px 0'>"
+            f"<img src='data:image/png;base64,{b64}' "
+            f"width='{size_px}' height='{size_px}' style='border:1px solid #ddd;border-radius:6px'/>"
+            f"<div style='font-size:11px;color:#555;margin-top:4px'>"
+            f"Scan &amp; Pay ₹{int(amount)}"
+            f"</div><div style='font-size:10px;color:#888'>{upi_id}</div>"
+            f"</div>"
+        )
+    except Exception:
+        return ""
 
 def pdf_link(pdf_bytes, bill_no):
     b64 = base64.b64encode(pdf_bytes).decode()
@@ -233,8 +346,8 @@ def show_login():
                             "logged_in":  True,
                             "token":      res["access_token"],
                             "role":       res["role"],
-                            "store_code": res.get("store_code"),
-                            "store_name": res.get("store_name","Store"),
+                            "store_code": res.get("store_code") or "",
+                            "store_name": res.get("store_name") or "Super Admin",
                             "username":   uname,
                         })
                         st.rerun()
@@ -288,7 +401,7 @@ st.sidebar.markdown("---")
 
 ALL_PAGES = ["🏠 Dashboard","🛒 New Bill","📋 Bill History",
              "👤 Customers","👔 Products","🏷️ Barcode Labels",
-             "📊 Reports","👥 Team"]
+             "📊 Reports","👥 Team","⚙️ Settings"]
 ROLE_PAGES = {
     "Admin":      ALL_PAGES,
     "Manager":    ALL_PAGES[:-1],
@@ -311,12 +424,183 @@ if st.sidebar.button("🚪 Logout"):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SUPER ADMIN
+# SUPER ADMIN DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 if IS_SUPER:
-    st.title("🛡️ Super Admin Panel")
-    st.info("Super Admin view — manage all stores from here.")
-    st.markdown("Connect your super admin endpoints to see all stores, freeze/unfreeze accounts and view analytics across all tenants.")
+    st.title("🛡️ Super Admin Dashboard")
+
+    ov = admin_overview() or {}
+
+    # ── KPI cards ──────────────────────────────────────────────────────────────
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.markdown(f'<div class="kpi-card"><h2>{ov.get("total_stores",0)}</h2><p>Total Stores</p></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="kpi-card" style="border-color:#2E7D32"><h2 style="color:#2E7D32">{ov.get("active_stores",0)}</h2><p>Active</p></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="kpi-card" style="border-color:#C62828"><h2 style="color:#C62828">{ov.get("inactive_stores",0)}</h2><p>Frozen</p></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="kpi-card" style="border-color:#E65100"><h2 style="color:#E65100">{ov.get("total_bills",0)}</h2><p>Total Bills</p></div>', unsafe_allow_html=True)
+    c5.markdown(f'<div class="kpi-card" style="border-color:#6A1B9A"><h2 style="color:#6A1B9A">₹{ov.get("total_revenue",0):,.0f}</h2><p>Platform Revenue</p></div>', unsafe_allow_html=True)
+
+    st.markdown("")
+    m1, m2 = st.columns(2)
+    m1.metric("Total Customers", ov.get("total_customers", 0))
+    m2.metric("Total Products", ov.get("total_products", 0))
+
+    plan_bd = ov.get("plan_breakdown", {})
+    if plan_bd:
+        plan_txt = "  |  ".join(f"**{k}**: {v}" for k, v in plan_bd.items())
+        st.caption(f"Plans — {plan_txt}")
+
+    st.markdown("---")
+
+    # ── Revenue & bills charts ─────────────────────────────────────────────────
+    daily = admin_daily_revenue() or []
+    ch1, ch2, ch3 = st.columns(3)
+
+    with ch1:
+        st.subheader("Daily Revenue (₹)")
+        if daily:
+            df_daily = pd.DataFrame(daily).set_index("date")
+            st.line_chart(df_daily["revenue"], use_container_width=True)
+        else:
+            st.info("No billing data yet.")
+
+    with ch2:
+        st.subheader("Daily Bills")
+        if daily:
+            df_daily2 = pd.DataFrame(daily).set_index("date")
+            st.bar_chart(df_daily2["bills"], use_container_width=True)
+        else:
+            st.info("No billing data yet.")
+
+    with ch3:
+        st.subheader("Revenue by Store (₹)")
+        by_store = admin_revenue_by_store() or []
+        if by_store:
+            df_store = pd.DataFrame(by_store).set_index("store")
+            st.bar_chart(df_store["revenue"], use_container_width=True)
+        else:
+            st.info("No billing data yet.")
+
+    st.markdown("---")
+
+    # ── Store table ────────────────────────────────────────────────────────────
+    st.subheader("All Stores")
+    stores = admin_list_stores() or []
+
+    if stores:
+        sf1, sf2, sf3 = st.columns([3, 1, 1])
+        search_q   = sf1.text_input("Search stores", placeholder="Store name, owner, or store code…", label_visibility="collapsed")
+        filter_status = sf2.selectbox("Status", ["All", "Active", "Frozen"], label_visibility="collapsed")
+        filter_plan   = sf3.selectbox("Plan", ["All"] + sorted({s.get("plan","Free") for s in stores}), label_visibility="collapsed")
+
+        rows = []
+        for s in stores:
+            q = search_q.strip().lower()
+            if q and q not in s["store_code"].lower() and q not in s["store_name"].lower() and q not in s["owner_user"].lower():
+                continue
+            if filter_status == "Active" and not s.get("is_active"):
+                continue
+            if filter_status == "Frozen" and s.get("is_active"):
+                continue
+            if filter_plan != "All" and s.get("plan","Free") != filter_plan:
+                continue
+            last = s.get("last_login","")
+            if last and "T" in last:
+                last = last.split("T")[0]
+            rows.append({
+                "Store Code":   s["store_code"],
+                "Store Name":   s["store_name"],
+                "Owner":        s["owner_user"],
+                "Plan":         s.get("plan","Free"),
+                "Status":       "Active" if s.get("is_active") else "Frozen",
+                "Bills":        s.get("bills",0),
+                "Revenue (₹)":  round(s.get("revenue",0),2),
+                "Customers":    s.get("customers",0),
+                "Products":     s.get("products",0),
+                "Last Login":   last or "—",
+            })
+
+        if rows:
+            df_stores = pd.DataFrame(rows)
+
+            def _color_status(v):
+                return "color:#2E7D32;font-weight:700" if v=="Active" else "color:#C62828;font-weight:700"
+
+            st.dataframe(
+                df_stores.style.map(_color_status, subset=["Status"]),
+                use_container_width=True, hide_index=True,
+            )
+            cap_col, csv_col, pdf_col = st.columns([5, 1, 1])
+            cap_col.caption(f"Showing {len(rows)} of {len(stores)} stores")
+            csv_col.download_button(
+                label="Export CSV",
+                data=df_stores.to_csv(index=False),
+                file_name=f"stores_{datetime.date.today()}.csv",
+                mime="text/csv",
+            )
+            pdf_col.download_button(
+                label="Export PDF",
+                data=build_stores_pdf(df_stores),
+                file_name=f"stores_{datetime.date.today()}.pdf",
+                mime="application/pdf",
+            )
+        else:
+            st.info("No stores match the filter.")
+    else:
+        st.info("No stores registered yet.")
+
+    st.markdown("---")
+
+    # ── Store management ───────────────────────────────────────────────────────
+    st.subheader("Manage a Store")
+
+    if stores:
+        store_codes = [s["store_code"] for s in stores]
+        store_labels = {s["store_code"]: f"{s['store_code']} — {s['store_name']} ({s['owner_user']})" for s in stores}
+        sel_code = st.selectbox("Select store", store_codes, format_func=lambda x: store_labels[x])
+        sel = next((s for s in stores if s["store_code"] == sel_code), {})
+
+        tab_view, tab_plan, tab_freeze = st.tabs(["📋 Details", "💳 Change Plan", "🔒 Freeze / Unfreeze"])
+
+        with tab_view:
+            col1, col2 = st.columns(2)
+            col1.markdown(f"**Store Code:** {sel.get('store_code','')}")
+            col1.markdown(f"**Owner:** {sel.get('owner_user','')}")
+            col1.markdown(f"**Plan:** {sel.get('plan','')}")
+            col1.markdown(f"**Status:** {'Active' if sel.get('is_active') else 'Frozen'}")
+            col2.markdown(f"**Bills:** {sel.get('bills',0)}")
+            col2.markdown(f"**Revenue:** ₹{sel.get('revenue',0):,.2f}")
+            col2.markdown(f"**Customers:** {sel.get('customers',0)}")
+            col2.markdown(f"**Products:** {sel.get('products',0)}")
+            ll = sel.get("last_login","")
+            if ll and "T" in ll: ll = ll.replace("T"," ")[:19]
+            col2.markdown(f"**Last Login:** {ll or '—'}")
+
+        with tab_plan:
+            with st.form("change_plan"):
+                new_plan = st.selectbox("New Plan", ["Free","Basic","Pro","Enterprise"],
+                                        index=["Free","Basic","Pro","Enterprise"].index(sel.get("plan","Free"))
+                                        if sel.get("plan","Free") in ["Free","Basic","Pro","Enterprise"] else 0)
+                new_notes = st.text_area("Notes (optional)", value=sel.get("notes","") or "")
+                save_plan = st.form_submit_button("Save Changes", type="primary")
+            if save_plan:
+                res = admin_update_store(sel_code, {"plan": new_plan, "notes": new_notes})
+                if res:
+                    st.success(f"Plan updated to **{new_plan}**")
+                    st.rerun()
+
+        with tab_freeze:
+            is_active = sel.get("is_active", True)
+            action_label = "Freeze Store" if is_active else "Unfreeze Store"
+            action_color = "red" if is_active else "green"
+            st.markdown(f"Store is currently **:{action_color}[{'Active' if is_active else 'Frozen'}]**")
+            if st.button(f"{'🔒' if is_active else '🔓'} {action_label}", type="primary"):
+                res = admin_toggle_store(sel_code)
+                if res:
+                    st.success(res.get("message","Done"))
+                    st.rerun()
+    else:
+        st.info("No stores to manage.")
+
     st.stop()
 
 
@@ -462,83 +746,88 @@ elif menu == "🛒 New Bill":
         st.success(st.session_state.just_added)
         st.session_state.just_added = None
 
-    ia,ib,ic = st.columns([3,1,1])
-    with ia: item_q   = st.text_input("🔍 Search Product (Name / ID / Category)",
-                                       key=f"iq_{st.session_state.search_ctr}")
-    with ib: item_qty = st.number_input("Qty", min_value=1, max_value=500, value=1)
-    with ic: item_sz  = st.selectbox("Size", SIZE_OPTIONS, index=2)
+    def _push_to_cart(prod, qty, sz, sp_override=None):
+        sp  = safe_float(sp_override if sp_override is not None else prod.get("selling_price", 0))
+        mrp = safe_float(prod.get("mrp", sp))
+        gst = safe_float(prod.get("gst_pct", 5))
+        if sp <= 0 and mrp > 0: sp = mrp
+        disc = round((1 - sp / mrp) * 100, 1) if mrp > 0 else 0
+        dup  = next((i for i, it in enumerate(st.session_state.cart)
+                     if it["item_id"] == prod["item_id"] and it["size"] == sz), None)
+        if dup is not None:
+            new_qty = st.session_state.cart[dup]["qty"] + qty
+            new_sub = round(sp * new_qty, 2)
+            st.session_state.cart[dup].update({
+                "qty": new_qty, "selling_price": sp, "discount_pct": disc,
+                "subtotal": new_sub,
+                "gst_amt":  round(new_sub * gst / 100, 2),
+                "item_total": round(new_sub + new_sub * gst / 100, 2),
+            })
+            st.session_state.just_added = f"🔄 Updated **{prod['product_name']}** qty → {new_qty}"
+        else:
+            sub  = round(sp * qty, 2)
+            gamt = round(sub * gst / 100, 2)
+            st.session_state.cart.append({
+                "item_id": prod["item_id"], "product_name": prod["product_name"],
+                "category": prod.get("category",""), "size": sz,
+                "color": prod.get("color",""), "qty": qty,
+                "mrp": mrp, "selling_price": sp, "discount_pct": disc,
+                "subtotal": sub, "gst_pct": gst, "gst_amt": gamt,
+                "item_total": round(sub + gamt, 2),
+            })
+            st.session_state.just_added = f"✅ Added **{prod['product_name']}** × {qty}"
+        st.session_state.search_ctr += 1
+
+    # ── Quick-add form: type Item ID + press Enter ──
+    with st.form("add_item_form", clear_on_submit=True):
+        ia, ib, ic = st.columns([3, 1, 1])
+        with ia:
+            item_q = st.text_input(
+                "🔍 Item ID or Name",
+                placeholder="Type Item ID (e.g. ITM001) and press Enter",
+                key=f"iq_{st.session_state.search_ctr}",
+            )
+        with ib:
+            item_qty = st.number_input("Qty", min_value=1, max_value=500, value=1)
+        with ic:
+            item_sz = st.selectbox("Size", SIZE_OPTIONS, index=2)
+        st.form_submit_button("➕ Add to Cart", type="primary", use_container_width=True)
 
     if item_q:
-        prods = get_products(search=item_q)
-        if prods:
-            PLACEHOLDER = "— Select a product to add —"
-            opts = [PLACEHOLDER] + [
-                f"{p['item_id']} — {p['product_name']} ({p.get('size','')}) "
-                f"MRP:Rs.{p['mrp']:.0f} | Sell:Rs.{p['selling_price']:.0f}" for p in prods
-            ]
-            ch = st.selectbox("Select Product", opts, key=f"ps_{st.session_state.search_ctr}")
-
-            if ch != PLACEHOLDER:
-                prod = prods[opts.index(ch) - 1]
-                sp   = safe_float(prod.get("selling_price", 0))
-                mrp  = safe_float(prod.get("mrp", sp))
-                gst  = safe_float(prod.get("gst_pct", 5))
-                if sp <= 0 and mrp > 0: sp = mrp
-
-                pm1, pm2, pm3, pm4 = st.columns([2, 2, 2, 1])
-                pm1.metric("MRP",  f"Rs.{mrp:.2f}")
-                pm2.metric("GST",  f"{gst}%")
-                with pm3:
-                    sp_ov = st.number_input("Selling Price (Rs.)",
-                                            value=float(max(sp, 1.0)),
-                                            min_value=0.01, step=1.0)
-                with pm4:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    add_clicked = st.button("➕ Add", type="primary", use_container_width=True)
-
-                if add_clicked:
-                    disc = round((1 - sp_ov / mrp) * 100, 1) if mrp > 0 else 0
-                    dup_idx = next(
-                        (i for i, it in enumerate(st.session_state.cart)
-                         if it["item_id"] == prod["item_id"] and it["size"] == item_sz),
-                        None
-                    )
-                    if dup_idx is not None:
-                        ex      = st.session_state.cart[dup_idx]
-                        new_qty = ex["qty"] + item_qty
-                        new_sub = round(sp_ov * new_qty, 2)
-                        st.session_state.cart[dup_idx].update({
-                            "qty":           new_qty,
-                            "selling_price": sp_ov,
-                            "discount_pct":  disc,
-                            "subtotal":      new_sub,
-                            "gst_amt":       round(new_sub * gst / 100, 2),
-                            "item_total":    round(new_sub + new_sub * gst / 100, 2),
-                        })
-                        st.session_state.just_added = f"🔄 Updated **{prod['product_name']}** qty → {new_qty}"
-                    else:
-                        sub  = round(sp_ov * item_qty, 2)
-                        gamt = round(sub * gst / 100, 2)
-                        st.session_state.cart.append({
-                            "item_id":       prod["item_id"],
-                            "product_name":  prod["product_name"],
-                            "category":      prod.get("category", ""),
-                            "size":          item_sz,
-                            "color":         prod.get("color", ""),
-                            "qty":           item_qty,
-                            "mrp":           mrp,
-                            "selling_price": sp_ov,
-                            "discount_pct":  disc,
-                            "subtotal":      sub,
-                            "gst_pct":       gst,
-                            "gst_amt":       gamt,
-                            "item_total":    round(sub + gamt, 2),
-                        })
-                        st.session_state.just_added = f"✅ Added **{prod['product_name']}** × {item_qty}"
-                    st.session_state.search_ctr += 1
-                    st.rerun()
+        query = item_q.strip()
+        # Try exact item ID match first
+        exact = get_product(query.upper()) or get_product(query)
+        if exact:
+            _push_to_cart(exact, item_qty, item_sz)
+            st.rerun()
         else:
-            st.info("No matching product found.")
+            prods = get_products(search=query)
+            if prods:
+                if len(prods) == 1:
+                    _push_to_cart(prods[0], item_qty, item_sz)
+                    st.rerun()
+                else:
+                    st.session_state["_hits"]     = prods
+                    st.session_state["_hits_qty"] = item_qty
+                    st.session_state["_hits_sz"]  = item_sz
+            else:
+                st.warning(f"No product found for **{query}**")
+
+    # Multiple matches: show compact pick list
+    if st.session_state.get("_hits"):
+        st.info(f"Multiple matches — click to add:")
+        for prod in st.session_state["_hits"][:12]:
+            c1, c2 = st.columns([6, 1])
+            c1.write(
+                f"**{prod['item_id']}** — {prod['product_name']} "
+                f"({prod.get('size','')})  MRP:Rs.{prod['mrp']:.0f}"
+            )
+            if c2.button("Add", key=f"_hit_{prod['item_id']}"):
+                qty = st.session_state.pop("_hits_qty", 1)
+                sz  = st.session_state.pop("_hits_sz", "M")
+                st.session_state.pop("_hits", None)
+                _push_to_cart(prod, qty, sz)
+                st.rerun()
 
     # ── Custom product (collapsed by default) ──
     with st.expander("📦 Add Custom / Unlisted Product"):
@@ -598,13 +887,13 @@ elif menu == "🛒 New Bill":
         disc    = round(raw_sub*disc_val/100,2) if disc_type.startswith("%") else min(disc_val,raw_sub)
         adj_sub = round(raw_sub-disc,2)
         adj_gst = round((raw_gst/raw_sub*adj_sub) if raw_sub else 0, 2)
-        grand   = round(adj_sub+adj_gst,2)
+        grand   = int(round(adj_sub+adj_gst))
 
         t1,t2,t3,t4 = st.columns(4)
-        t1.metric("Subtotal",    f"Rs.{raw_sub:,.2f}")
-        t2.metric("Discount 🏷️", f"−Rs.{disc:,.2f}", delta_color="off")
-        t3.metric("GST",         f"Rs.{adj_gst:,.2f}")
-        t4.metric("Grand Total", f"Rs.{grand:,.2f}")
+        t1.metric("Subtotal",    f"Rs.{raw_sub:,.0f}")
+        t2.metric("Discount 🏷️", f"−Rs.{disc:,.0f}", delta_color="off")
+        t3.metric("GST",         f"Rs.{adj_gst:,.0f}")
+        t4.metric("Grand Total", f"Rs.{grand:,}")
 
         st.markdown("---")
         st.subheader("💳 Step 4 — Payment")
@@ -654,13 +943,24 @@ elif menu == "🛒 New Bill":
         b = st.session_state["last_bill"]
         st.markdown("---")
 
+        _sp = get_store_profile() or {}
+
         col_r, col_a = st.columns([1,1])
 
         with col_r:
             st.subheader("🧾 Receipt Preview")
-            L = [f"<div class='thermal'>"]
+            store_addr  = _sp.get("address","") or ""
+            store_ph_r  = _sp.get("phone","") or ""
+            store_gstin = _sp.get("gstin","") or ""
+            upi_id_r    = _sp.get("upi_id","") or ""
+
+            L = ["<div class='thermal'>"]
             L.append(f"<div class='tc bold' style='font-size:15px'>★ {STORE_NAME} ★</div>")
-            L.append(f"<div class='tc' style='font-size:10px'>{st.session_state.get('store_name','')}</div>")
+            if store_addr:
+                L.append(f"<div class='tc' style='font-size:9px'>{store_addr}</div>")
+            if store_ph_r:
+                L.append(f"<div class='tc' style='font-size:9px'>Ph: {store_ph_r}"
+                         + (f"  |  GSTIN: {store_gstin}" if store_gstin else "") + "</div>")
             L.append("<hr>")
             L.append(f"<div class='bold'>Bill # : {b['bill_no']}</div>")
             L.append(f"<div>Date   : {b['bill_date']}  {b['bill_time']}</div>")
@@ -671,19 +971,22 @@ elif menu == "🛒 New Bill":
             L.append("<hr>")
             for it in b.get("items",[]):
                 L.append(f"<div>{str(it.get('product_name',''))[:22]} ({it.get('size','')})</div>")
-                L.append(f"<div class='row'><span>{it.get('qty',1)}×Rs.{safe_float(it.get('selling_price',0)):.2f}</span>"
-                         f"<span>Rs.{safe_float(it.get('subtotal',0)):.2f}</span></div>")
+                L.append(f"<div class='row'><span>{it.get('qty',1)}×Rs.{safe_float(it.get('selling_price',0)):.0f}</span>"
+                         f"<span>Rs.{safe_float(it.get('subtotal',0)):.0f}</span></div>")
             L.append("<hr>")
             if safe_float(b.get("discount",0)) > 0:
                 dt = "%" if b.get("discount_type","").startswith("%") else "Rs."
-                L.append(f"<div class='row'><span>Discount({dt})</span><span>−Rs.{safe_float(b['discount']):.2f}</span></div>")
-            L.append(f"<div class='row'><span>GST</span><span>Rs.{safe_float(b['gst_total']):.2f}</span></div>")
-            L.append(f"<div class='row bold'><span>TOTAL</span><span>Rs.{safe_float(b['grand_total']):.2f}</span></div>")
+                L.append(f"<div class='row'><span>Discount({dt})</span><span>−Rs.{safe_float(b['discount']):.0f}</span></div>")
+            L.append(f"<div class='row'><span>GST</span><span>Rs.{safe_float(b['gst_total']):.0f}</span></div>")
+            L.append(f"<div class='row bold'><span>TOTAL</span><span>Rs.{int(safe_float(b['grand_total']))}</span></div>")
             L.append("<hr>")
             L.append(f"<div>Payment : {b.get('payment_mode','')}</div>")
-            L.append(f"<div class='row'><span>Paid</span><span>Rs.{safe_float(b['amount_paid']):.2f}</span></div>")
+            L.append(f"<div class='row'><span>Paid</span><span>Rs.{safe_float(b['amount_paid']):.0f}</span></div>")
             if safe_float(b.get("change_amt",0)) > 0:
-                L.append(f"<div class='row'><span>Change</span><span>Rs.{safe_float(b['change_amt']):.2f}</span></div>")
+                L.append(f"<div class='row'><span>Change</span><span>Rs.{safe_float(b['change_amt']):.0f}</span></div>")
+            if upi_id_r:
+                L.append("<hr>")
+                L.append(_upi_qr_html(upi_id_r, STORE_NAME, safe_float(b['grand_total']), b['bill_no']))
             L.append("<hr>")
             L.append("<div class='tc bold'>★ Thank You! Visit Again ★</div>")
             L.append("<div class='tc' style='font-size:10px'>Exchange within 7 days with receipt</div>")
@@ -704,7 +1007,7 @@ elif menu == "🛒 New Bill":
             # WhatsApp
             cust_phone = b.get("phone","")
             if cust_phone:
-                wlink = wa_link(b, STORE_NAME, cust_phone)
+                wlink = wa_link(b, STORE_NAME, cust_phone, store_profile=_sp)
                 st.markdown(f"<a href='{wlink}' target='_blank' class='wa-btn'>📲 Send on WhatsApp</a>",
                             unsafe_allow_html=True)
             else:
@@ -1015,7 +1318,7 @@ elif menu == "👥 Team":
             df_show = df[show].copy()
             if "is_active" in df_show.columns:
                 df_show["is_active"] = df_show["is_active"].map({True:"✅ Active",False:"❄️ Inactive",1:"✅ Active",0:"❄️ Inactive"})
-            st.dataframe(df_show, use_container_width=True, height=300)
+            st.dataframe(df_show, use_container_width=True      , height=300)
 
             st.markdown("---"); st.subheader("Toggle User Status")
             unames = [u["username"] for u in team]
@@ -1057,3 +1360,58 @@ elif menu == "👥 Team":
                     if res: st.success(f"✅ Password updated for **{cpu}**")
         else:
             st.info("Add users first.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 9. SETTINGS
+# ══════════════════════════════════════════════════════════════════════════════
+elif menu == "⚙️ Settings":
+    if ROLE not in ("Admin",):
+        st.error("Admin access required.")
+        st.stop()
+
+    st.title("⚙️ Store Settings")
+
+    profile = get_store_profile() or {}
+
+    tab_s1, tab_s2 = st.tabs(["🏪 Store Info", "💳 UPI / Payment"])
+
+    with tab_s1:
+        with st.form("store_info_form"):
+            si1, si2 = st.columns(2)
+            sn  = si1.text_input("Store Name",  value=profile.get("store_name",""))
+            se  = si2.text_input("Email",        value=profile.get("email","") or "")
+            sp2 = si1.text_input("Phone",        value=profile.get("phone","") or "")
+            sg  = si2.text_input("GSTIN",        value=profile.get("gstin","") or "")
+            sa  = st.text_area("Address",        value=profile.get("address","") or "", height=80)
+            save_info = st.form_submit_button("💾 Save Store Info", type="primary")
+        if save_info:
+            res = update_store_profile({"store_name":sn,"email":se,"phone":sp2,"gstin":sg,"address":sa})
+            if res:
+                st.success("✅ Store info updated!")
+                st.rerun()
+
+    with tab_s2:
+        st.markdown("#### 💳 UPI ID for Payment QR Code")
+        st.info(
+            "Add your UPI ID below. A QR code will automatically appear on every receipt "
+            "so customers can scan and pay the exact bill amount instantly."
+        )
+        with st.form("upi_form"):
+            upi_val = st.text_input(
+                "UPI ID",
+                value=profile.get("upi_id","") or "",
+                placeholder="e.g. shopname@upi or 9876543210@paytm",
+            )
+            save_upi = st.form_submit_button("💾 Save UPI ID", type="primary")
+        if save_upi:
+            res = update_store_profile({"upi_id": upi_val.strip()})
+            if res:
+                st.success(f"✅ UPI ID **{upi_val.strip()}** saved!")
+                if upi_val.strip():
+                    st.markdown("**Preview QR Code:**")
+                    st.markdown(
+                        _upi_qr_html(upi_val.strip(), STORE_NAME, 100, "DEMO", size_px=160),
+                        unsafe_allow_html=True
+                    )
+                    st.caption("This is a demo QR with Rs.100 — actual QR on receipt will have the real bill amount.")

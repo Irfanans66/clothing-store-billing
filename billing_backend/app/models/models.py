@@ -28,6 +28,7 @@ class Store(Base):
     address      = Column(Text)
     gstin        = Column(String(20))
     plan         = Column(String(20), default="Free")
+    upi_id       = Column(String(100), nullable=True)
     is_active    = Column(Boolean, default=True)
     created_at   = Column(DateTime, default=_now)
     last_login   = Column(DateTime, nullable=True)

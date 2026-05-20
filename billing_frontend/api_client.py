@@ -225,4 +225,43 @@ def change_team_password(username: str, data: dict):
     return _handle(r) if r else None
 
 
+# ── STORE PROFILE ────────────────────────────────────────────────────────────
+
+def get_store_profile():
+    r = _get(f"{API_BASE_URL}/auth/profile", headers=_headers())
+    return _handle(r) if r else None
+
+def update_store_profile(data: dict):
+    r = _patch(f"{API_BASE_URL}/auth/profile", headers=_headers(), json=data)
+    return _handle(r) if r else None
+
+
+# ── SUPER ADMIN ───────────────────────────────────────────────────────────────
+
+def admin_overview():
+    r = _get(f"{API_BASE_URL}/admin/overview", headers=_headers())
+    return _handle(r) if r else {}
+
+def admin_list_stores():
+    r = _get(f"{API_BASE_URL}/admin/stores", headers=_headers())
+    return _handle(r) if r else []
+
+def admin_toggle_store(store_code: str):
+    r = _patch(f"{API_BASE_URL}/admin/stores/{store_code}/toggle", headers=_headers())
+    return _handle(r) if r else None
+
+def admin_update_store(store_code: str, data: dict):
+    r = _patch(f"{API_BASE_URL}/admin/stores/{store_code}", headers=_headers(), json=data)
+    return _handle(r) if r else None
+
+def admin_daily_revenue():
+    r = _get(f"{API_BASE_URL}/admin/daily-revenue", headers=_headers())
+    return _handle(r) if r else []
+
+def admin_revenue_by_store():
+    r = _get(f"{API_BASE_URL}/admin/revenue-by-store", headers=_headers())
+    return _handle(r) if r else []
+
+
+
 

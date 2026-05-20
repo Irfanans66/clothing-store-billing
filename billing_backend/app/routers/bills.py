@@ -51,15 +51,12 @@ def _compute_bill(items_in, discount: float, discount_type: str, amount_paid: fl
         raw_sub += sub
         raw_gst += gamt
 
-    # Apply discount
-    if discount_type == "%":
-        disc_amt = round(raw_sub * discount / 100, 2)
-    else:
-        disc_amt = min(float(discount), raw_sub)
+    # Apply discount (both frontends send the pre-computed rupee amount)
+    disc_amt = min(round(float(discount), 2), raw_sub)
 
     adj_sub   = round(raw_sub - disc_amt, 2)
     adj_gst   = round((raw_gst / raw_sub * adj_sub) if raw_sub else 0, 2)
-    grand     = round(adj_sub + adj_gst, 2)
+    grand     = round(adj_sub + adj_gst)   # rounded to nearest rupee
     change    = round(amount_paid - grand, 2)
 
     if change < -0.01:
@@ -318,12 +315,18 @@ def get_receipt_pdf(
     try:
         from reportlab.pdfgen import canvas as rl_canvas
         from reportlab.lib.units import mm
+        from reportlab.lib.utils import ImageReader
     except ImportError:
         raise HTTPException(status_code=500, detail="reportlab not installed.")
 
+    upi_id = (store.upi_id or "").strip() if store else ""
+    has_qr = bool(upi_id)
+    qr_size_mm = 32 if has_qr else 0
+
     W   = 80 * mm
     buf = io.BytesIO()
-    H   = (65 + len(raw_items) * 14 + 45) * mm
+    # Each item takes 2 text rows; add generous base + footer margin so QR is never clipped
+    H   = (85 + len(raw_items) * 15 + 65 + (qr_size_mm + 22 if has_qr else 0)) * mm
     c   = rl_canvas.Canvas(buf, pagesize=(W, H))
     y   = H - 6 * mm
 
@@ -374,23 +377,48 @@ def get_receipt_pdf(
     if bill.discount > 0:
         rw(f"Discount ({bill.discount_type})", f"-Rs.{bill.discount:.2f}")
     rw("GST",               f"Rs.{bill.gst_total:.2f}")
-    rw("TOTAL",             f"Rs.{bill.grand_total:.2f}", bold=True, sz=10)
+    rw("TOTAL",             f"Rs.{int(bill.grand_total)}", bold=True, sz=10)
     dash()
     lft(f"Payment : {bill.payment_mode}")
-    rw("Paid",              f"Rs.{bill.amount_paid:.2f}")
+    rw("Paid",              f"Rs.{bill.amount_paid:.0f}")
     if bill.change_amt > 0:
-        rw("Change",        f"Rs.{bill.change_amt:.2f}")
+        rw("Change",        f"Rs.{bill.change_amt:.0f}")
     if bill.notes:
         lft(f"Note: {bill.notes}", sz=7)
     dash()
     ctr("* Thank You! Visit Again *", "Courier-Bold", 8)
     ctr("Exchange within 7 days with receipt", "Courier", 6)
+
+    if has_qr:
+        try:
+            import qrcode
+            upi_url = (
+                f"upi://pay?pa={upi_id}&pn={store.store_name}"
+                f"&am={int(bill.grand_total)}&cu=INR"
+                f"&tn=Bill%20{bill.bill_no}"
+            )
+            qr_img = qrcode.make(upi_url)
+            qr_buf = io.BytesIO()
+            qr_img.save(qr_buf, format="PNG")
+            qr_buf.seek(0)
+            dash()
+            ctr("Scan to Pay via UPI", "Courier-Bold", 8)
+            qr_side = qr_size_mm * mm
+            qr_y = max(y - qr_side, 6 * mm)   # never draw below 6mm from bottom
+            c.drawImage(ImageReader(qr_buf),
+                        (W - qr_side) / 2, qr_y,
+                        width=qr_side, height=qr_side)
+            y = qr_y - 2 * mm
+            ctr(upi_id, "Courier", 7)
+        except Exception:
+            pass
+
     c.save()
 
     return Response(
         content=buf.getvalue(),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="Receipt_{bill_no}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="Receipt_{bill_no}.pdf"'},
     )
 
 

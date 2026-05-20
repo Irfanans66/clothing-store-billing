@@ -9,10 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.deps import require_store_access
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.models import Store, StoreUser, SuperAdmin
 from app.schemas.schemas import (
-    LoginRequest, MessageResponse, StoreRegisterRequest, TokenResponse,
+    LoginRequest, MessageResponse, StoreOut, StorePatchRequest,
+    StoreRegisterRequest, TokenResponse,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -124,3 +126,38 @@ def register_store(payload: StoreRegisterRequest, db: Session = Depends(get_db))
     return MessageResponse(
         message=f"Store registered successfully! Store code: {store_code}. Login with your username."
     )
+
+
+# ── GET /auth/profile ─────────────────────────────────────────────────────────
+
+@router.get("/profile", response_model=StoreOut)
+def get_profile(
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    sc = identity["store_code"]
+    store = db.query(Store).filter(Store.store_code == sc).first()
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found.")
+    return store
+
+
+# ── PATCH /auth/profile ───────────────────────────────────────────────────────
+
+@router.patch("/profile", response_model=StoreOut)
+def update_profile(
+    payload: StorePatchRequest,
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    sc = identity["store_code"]
+    store = db.query(Store).filter(Store.store_code == sc).first()
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found.")
+
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(store, field, value)
+
+    db.commit()
+    db.refresh(store)
+    return store

@@ -65,6 +65,7 @@ class StoreOut(BaseModel):
     address: Optional[str]
     gstin: Optional[str]
     plan: str
+    upi_id: Optional[str] = None
     is_active: bool
     created_at: Optional[datetime]
     last_login: Optional[datetime]
@@ -77,6 +78,7 @@ class StorePatchRequest(BaseModel):
     address: Optional[str] = None
     gstin: Optional[str] = None
     plan: Optional[str] = None
+    upi_id: Optional[str] = None
     notes: Optional[str] = None
 
 

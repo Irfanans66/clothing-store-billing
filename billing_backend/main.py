@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.database import engine, Base, SessionLocal
 from app.core.security import hash_password
-from app.models.models import SuperAdmin
-from app.routers import auth, customers, products, bills, reports, store_users
+from app.models.models import SuperAdmin, Store
+from app.routers import auth, customers, products, bills, reports, store_users, admin
 
 settings = get_settings()
 
@@ -38,6 +38,33 @@ def seed_super_admin():
 
 seed_super_admin()
 
+
+def seed_default_store():
+    db = SessionLocal()
+    try:
+        existing = db.query(Store).filter(Store.owner_user == "admin").first()
+        if not existing:
+            n = db.query(Store).count() + 1
+            store_code = f"STORE{n:03d}"
+            db.add(Store(
+                store_code=store_code,
+                store_name="Demo Store",
+                owner_user="admin",
+                password_hash=hash_password("admin123"),
+                email="admin@demo.com",
+                phone="",
+                address="",
+            ))
+            db.commit()
+            print(f"✅ Default store created: admin / admin123 ({store_code})")
+        else:
+            print("ℹ️  Default admin store already exists.")
+    finally:
+        db.close()
+
+
+seed_default_store()
+
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 app = FastAPI(
     title=settings.APP_NAME,
@@ -63,6 +90,7 @@ app.include_router(products.router,  prefix=PREFIX)
 app.include_router(bills.router,     prefix=PREFIX)
 app.include_router(reports.router,     prefix=PREFIX)
 app.include_router(store_users.router, prefix=PREFIX)
+app.include_router(admin.router,      prefix=PREFIX)
 
 
 # ── Root endpoints ────────────────────────────────────────────────────────────
