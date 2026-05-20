@@ -2,10 +2,11 @@
 api_client.py — Fixed v2.0
 """
 from typing import Optional
+import os
 import requests
 import streamlit as st
 
-API_BASE_URL = "http://localhost:8000/api/v1"
+API_BASE_URL = os.getenv("API_URL", "http://localhost:8000") + "/api/v1"
 
 
 def _headers():
