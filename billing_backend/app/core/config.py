@@ -17,9 +17,11 @@ class Settings(BaseSettings):
     SUPER_ADMIN_USERNAME: str = "superadmin"
     SUPER_ADMIN_PASSWORD: str = "Super@Admin2024"
 
+    ALLOWED_ORIGINS: str = "*"
+
     APP_NAME: str = "Clothing Store Billing API"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
 
 @lru_cache

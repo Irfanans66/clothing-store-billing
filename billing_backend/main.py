@@ -69,14 +69,15 @@ seed_default_store()
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
 )
 
 # ── CORS middleware ───────────────────────────────────────────────────────────
+origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
