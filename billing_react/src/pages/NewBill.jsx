@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   Card, Row, Col, Input, Button, InputNumber, Select, Table, Space, Tag,
   Typography, Divider, Radio, Statistic, Form, message, Checkbox, Modal,
-  Spin, Alert, Grid, Tooltip,
+  Spin, Alert, Grid, Tooltip, theme as antTheme,
 } from 'antd'
 import {
   SearchOutlined, DeleteOutlined, PlusOutlined, PrinterOutlined,
@@ -70,12 +70,13 @@ export default function NewBill() {
   const [customName, setCustomName]   = useState('')
   const [customForm] = Form.useForm()
 
-  const [discType, setDiscType]   = useState('%')
-  const [discVal, setDiscVal]     = useState(0)
-  const [payMode, setPayMode]     = useState('Cash')
-  const [amountPaid, setAmountPaid] = useState(0)
+  const [discType, setDiscType]       = useState('%')
+  const [discVal, setDiscVal]         = useState(0)
+  const [payMode, setPayMode]         = useState('Cash')
+  const [amountPaid, setAmountPaid]   = useState(0)
+  const [creditAmount, setCreditAmount] = useState(0)
   const [splitPayMode, setSplitPayMode] = useState('Cash')
-  const [notes, setNotes]         = useState('')
+  const [notes, setNotes]             = useState('')
 
   const [billing, setBilling]     = useState(false)
   const [lastBill, setLastBill]   = useState(null)
@@ -196,6 +197,8 @@ export default function NewBill() {
     customForm.resetFields()
   }
 
+  const { token } = antTheme.useToken()
+
   // ── Totals ─────────────────────────────────────────────────────────────────
   const rawSub = cart.reduce((s, i) => s + i.subtotal, 0)
   const rawGst = cart.reduce((s, i) => s + i.gst_amt, 0)
@@ -205,13 +208,23 @@ export default function NewBill() {
   const adjSub = rawSub - disc
   const adjGst = rawSub > 0 ? Math.round(rawGst / rawSub * adjSub) : 0
   const grand  = Math.round(adjSub + adjGst)
-  const isCredit = payMode === 'Credit'
-  const isPartialCredit = isCredit && amountPaid > 0 && amountPaid < grand
-  const change   = Math.round(amountPaid - grand)
 
+  const isCredit     = payMode === 'Credit'
+  // upfront = grand - creditAmount; partial = some amount collected now
+  const upfront      = isCredit ? Math.max(0, grand - creditAmount) : amountPaid
+  const isPartialCredit = isCredit && upfront > 0
+  const change       = Math.round(upfront - grand) // negative = balance due
+
+  // Sync amountPaid with grand for non-credit modes
   useEffect(() => {
     if (!isCredit) setAmountPaid(grand)
   }, [grand, isCredit])
+
+  // When switching TO Credit, default to full credit (upfront = 0)
+  useEffect(() => {
+    if (isCredit) setCreditAmount(grand)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCredit])
 
   // ── Generate Bill ──────────────────────────────────────────────────────────
   async function handleGenerateBill() {
@@ -230,14 +243,14 @@ export default function NewBill() {
         items: cart.map(({ _key, item_total, base_price, item_disc_pct, ...it }) => it),
         discount: disc, discount_type: discType,
         payment_mode: isPartialCredit ? `${splitPayMode}+Credit` : payMode,
-        amount_paid: amountPaid,
+        amount_paid: isCredit ? upfront : amountPaid,
         notes,
       }
       const res = await createBill(payload)
       setLastBill(res)
       setCart([]); setCustomer(null); setWalkIn(false)
       setCustSearch(''); setCustResults([])
-      setDiscVal(0); setNotes('')
+      setDiscVal(0); setNotes(''); setCreditAmount(0)
       message.success(`Bill ${res.bill_no} generated!`)
     } catch (err) {
       message.error(err.message)
@@ -347,83 +360,158 @@ export default function NewBill() {
 
   // ── Receipt ────────────────────────────────────────────────────────────────
   function ReceiptPreview({ bill }) {
+    const { token: tk } = antTheme.useToken()
     const upiId = storeProfile?.upi_id
     const qrUrl = upiId
       ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(storeName)}&am=${Math.round(bill.grand_total)}&cu=INR&tn=Bill%20${bill.bill_no}`
       : null
 
+    const row = (label, value, opts = {}) => (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', ...opts.wrapStyle }}>
+        <span style={{ color: opts.labelColor || tk.colorTextSecondary, fontSize: opts.labelSize || 13 }}>{label}</span>
+        <span style={{ color: opts.valueColor || tk.colorText, fontWeight: opts.bold ? 700 : 500, fontSize: opts.valueSize || 13 }}>{value}</span>
+      </div>
+    )
+
     return (
-      <div style={{ fontFamily: 'Courier New, monospace', fontSize: 13, maxWidth: 310, margin: '0 auto',
-        background: '#fff', border: '1px dashed #aaa', borderRadius: 6, padding: '20px 14px' }}>
-        <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 15 }}>★ {storeName} ★</div>
-        {storeProfile?.address && <div style={{ textAlign: 'center', fontSize: 10 }}>{storeProfile.address}</div>}
-        {storeProfile?.phone && <div style={{ textAlign: 'center', fontSize: 9 }}>Ph: {storeProfile.phone}{storeProfile.gstin ? `  GSTIN: ${storeProfile.gstin}` : ''}</div>}
-        <Divider dashed style={{ margin: '8px 0' }} />
-        <div><b>Bill # :</b> {bill.bill_no}</div>
-        <div>Date   : {bill.bill_date}  {bill.bill_time}</div>
-        <div>Cust   : {bill.customer_name || 'Walk-in'}</div>
-        <div>Phone  : {bill.phone || '-'}</div>
-        {bill.status === 'Credit' && (
-          <div style={{ color: '#C62828', fontWeight: 700 }}>⚠ CREDIT SALE</div>
-        )}
-        <Divider dashed style={{ margin: '8px 0' }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-          <span>Item</span><span>Amt</span>
+      <div style={{
+        maxWidth: 330, margin: '0 auto',
+        borderRadius: 16, overflow: 'hidden',
+        boxShadow: `0 4px 24px ${tk.colorBorder}`,
+        border: `1px solid ${tk.colorBorderSecondary}`,
+        fontFamily: "'Segoe UI', sans-serif",
+      }}>
+
+        {/* ── Header ── */}
+        <div style={{
+          background: 'linear-gradient(135deg, #1A237E 0%, #3949AB 100%)',
+          color: '#fff', padding: '20px 18px', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 0.5 }}>👗 {storeName}</div>
+          {storeProfile?.address && (
+            <div style={{ fontSize: 11, opacity: 0.85, marginTop: 4 }}>📍 {storeProfile.address}</div>
+          )}
+          {storeProfile?.phone && (
+            <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>📞 {storeProfile.phone}</div>
+          )}
+          {storeProfile?.gstin && (
+            <div style={{ fontSize: 10, opacity: 0.65, marginTop: 2 }}>GST: {storeProfile.gstin}</div>
+          )}
         </div>
-        <Divider dashed style={{ margin: '4px 0' }} />
-        {bill.items?.map((it, i) => (
-          <div key={i}>
-            <div>{String(it.product_name || '').slice(0,22)} ({it.size})</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>{it.qty}×₹{it.selling_price}</span>
-              <span>₹{Math.round(it.subtotal)}</span>
+
+        {/* ── Bill Info ── */}
+        <div style={{ padding: '12px 18px', background: tk.colorBgElevated, borderBottom: `1px solid ${tk.colorBorderSecondary}` }}>
+          {row('Bill No', bill.bill_no, { bold: true })}
+          {row('Date', `${bill.bill_date} ${bill.bill_time}`)}
+          {row('Customer', bill.customer_name || 'Walk-in', { bold: true })}
+          {bill.phone && row('Phone', bill.phone)}
+          {bill.status === 'Credit' && (
+            <div style={{
+              marginTop: 8, background: '#ffebee', color: '#c62828',
+              borderRadius: 8, padding: '5px 12px', textAlign: 'center',
+              fontWeight: 700, fontSize: 12, letterSpacing: 0.5,
+            }}>⚠ CREDIT SALE</div>
+          )}
+        </div>
+
+        {/* ── Items ── */}
+        <div style={{ padding: '12px 18px', background: tk.colorBgContainer }}>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            fontSize: 11, fontWeight: 700, letterSpacing: 1,
+            color: tk.colorTextSecondary, textTransform: 'uppercase',
+            borderBottom: `1px dashed ${tk.colorBorderSecondary}`, paddingBottom: 6, marginBottom: 8,
+          }}>
+            <span>Item</span><span>Amount</span>
+          </div>
+          {bill.items?.map((it, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: tk.colorText, fontWeight: 600, fontSize: 13 }}>
+                  {String(it.product_name || '').slice(0, 22)}
+                  <span style={{ color: tk.colorTextSecondary, fontWeight: 400 }}> ({it.size})</span>
+                </span>
+                <span style={{ color: tk.colorText, fontWeight: 700 }}>₹{Math.round(it.subtotal)}</span>
+              </div>
+              <div style={{ color: tk.colorTextSecondary, fontSize: 11 }}>
+                {it.qty} × ₹{it.selling_price}
+              </div>
             </div>
-          </div>
-        ))}
-        <Divider dashed style={{ margin: '8px 0' }} />
-        {bill.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Discount</span><span>-₹{Math.round(bill.discount)}</span>
-          </div>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>GST</span><span>₹{Math.round(bill.gst_total)}</span>
+          ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}>
-          <span>TOTAL</span><span>₹{Math.round(bill.grand_total)}</span>
-        </div>
-        <Divider dashed style={{ margin: '8px 0' }} />
-        <div>Payment : {bill.payment_mode}</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Paid</span><span>₹{Math.round(bill.amount_paid)}</span>
-        </div>
-        {bill.change_amt > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Change</span><span>₹{Math.round(bill.change_amt)}</span>
+
+        {/* ── Totals ── */}
+        <div style={{
+          padding: '12px 18px', background: tk.colorBgElevated,
+          borderTop: `1px solid ${tk.colorBorderSecondary}`,
+        }}>
+          {bill.discount > 0 && row('Discount', `-₹${Math.round(bill.discount)}`, { valueColor: '#2e7d32', bold: true })}
+          {row('GST', `₹${Math.round(bill.gst_total)}`)}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            borderTop: `2px solid ${tk.colorBorderSecondary}`, marginTop: 8, paddingTop: 8,
+          }}>
+            <span style={{ fontWeight: 800, fontSize: 15, color: tk.colorText }}>GRAND TOTAL</span>
+            <span style={{
+              fontWeight: 800, fontSize: 20,
+              background: 'linear-gradient(135deg, #1A237E, #3949AB)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>₹{Math.round(bill.grand_total)}</span>
           </div>
-        )}
-        {bill.change_amt < 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#C62828', fontWeight: 700 }}>
-            <span>Balance Due</span><span>₹{Math.round(Math.abs(bill.change_amt))}</span>
-          </div>
-        )}
+        </div>
+
+        {/* ── Payment ── */}
+        <div style={{ padding: '12px 18px', background: tk.colorBgContainer }}>
+          {row('Payment Mode', bill.payment_mode, { bold: true })}
+          {row('Amount Paid', `₹${Math.round(bill.amount_paid)}`, { bold: true })}
+          {bill.change_amt > 0 && row('Change', `₹${Math.round(bill.change_amt)}`, { valueColor: '#2e7d32', bold: true })}
+          {bill.change_amt < 0 && (
+            <div style={{
+              marginTop: 8, background: '#ffebee',
+              borderRadius: 8, padding: '8px 12px',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <span style={{ color: '#c62828', fontWeight: 700 }}>Balance Due</span>
+              <span style={{ color: '#c62828', fontWeight: 800, fontSize: 15 }}>₹{Math.round(Math.abs(bill.change_amt))}</span>
+            </div>
+          )}
+        </div>
+
+        {/* ── QR Code ── */}
         {qrUrl && (
-          <>
-            <Divider dashed style={{ margin: '8px 0' }} />
-            <div style={{ textAlign: 'center' }}>
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(qrUrl)}`}
-                alt="UPI QR" width={130} height={130}
-                style={{ border: '1px solid #eee', borderRadius: 6 }}
-              />
-              <div style={{ fontSize: 10, color: '#555', marginTop: 4 }}>Scan & Pay ₹{Math.round(bill.grand_total)}</div>
-              <div style={{ fontSize: 9, color: '#888' }}>{upiId}</div>
+          <div style={{
+            padding: '16px 18px', textAlign: 'center',
+            background: tk.colorBgElevated,
+            borderTop: `1px solid ${tk.colorBorderSecondary}`,
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: tk.colorText, marginBottom: 10 }}>
+              📱 Scan & Pay via UPI
             </div>
-          </>
+            <div style={{
+              display: 'inline-block',
+              background: '#fff', padding: 8, borderRadius: 12,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            }}>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(qrUrl)}&bgcolor=ffffff&color=1A237E`}
+                alt="UPI QR" width={140} height={140}
+                style={{ display: 'block', borderRadius: 6 }}
+              />
+            </div>
+            <div style={{ fontSize: 12, color: tk.colorTextSecondary, marginTop: 8, fontWeight: 600 }}>
+              ₹{Math.round(bill.grand_total)} · {upiId}
+            </div>
+          </div>
         )}
-        <Divider dashed style={{ margin: '8px 0' }} />
-        <div style={{ textAlign: 'center', fontWeight: 700 }}>★ Thank You! Visit Again ★</div>
-        <div style={{ textAlign: 'center', fontSize: 10 }}>Exchange within 7 days with receipt</div>
+
+        {/* ── Footer ── */}
+        <div style={{
+          background: 'linear-gradient(135deg, #1A237E 0%, #3949AB 100%)',
+          color: '#fff', padding: '14px 18px', textAlign: 'center',
+        }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>★ Thank You! Visit Again ★</div>
+          <div style={{ fontSize: 11, opacity: 0.75, marginTop: 4 }}>Exchange within 7 days with receipt</div>
+        </div>
       </div>
     )
   }
@@ -664,77 +752,114 @@ export default function NewBill() {
               style={{ borderRadius: 12 }}
             >
               <Row gutter={[12, 12]}>
-                <Col xs={24} sm={8}>
+                {/* Payment Mode */}
+                <Col xs={24} sm={isCredit ? 12 : 8}>
                   <div style={{ marginBottom: 4 }}><Text type="secondary">Payment Mode</Text></div>
-                  <Select value={payMode} onChange={(v) => {
-                    setPayMode(v)
-                    if (v !== 'Credit') setAmountPaid(grand)
-                    else setAmountPaid(0)
-                  }} style={{ width: '100%' }}>
+                  <Select value={payMode} onChange={(v) => setPayMode(v)} style={{ width: '100%' }}>
                     {PAYMENT_MODES.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
                   </Select>
                 </Col>
-                <Col xs={24} sm={8}>
-                  <div style={{ marginBottom: 4 }}>
-                    <Text type="secondary">Amount Paid (₹)</Text>
-                    {isCredit && <Tag color="orange" style={{ marginLeft: 6, fontSize: 10 }}>Partial OK</Tag>}
-                  </div>
-                  <InputNumber
-                    value={amountPaid} onChange={setAmountPaid} min={0} max={isCredit ? undefined : grand}
-                    style={{ width: '100%' }} size="large"
-                  />
-                </Col>
-                <Col xs={24} sm={8}>
-                  {isCredit ? (
-                    <Statistic
-                      title="Balance Due (Credit)"
-                      value={`₹${Math.abs(Math.min(change, 0)).toLocaleString()}`}
-                      valueStyle={{ color: change < 0 ? '#C62828' : '#2E7D32', fontWeight: 700 }}
+
+                {/* Non-credit: Amount Paid */}
+                {!isCredit && (
+                  <Col xs={24} sm={8}>
+                    <div style={{ marginBottom: 4 }}><Text type="secondary">Amount Paid (₹)</Text></div>
+                    <InputNumber
+                      value={amountPaid} onChange={setAmountPaid} min={0} max={grand}
+                      style={{ width: '100%' }} size="large"
                     />
+                  </Col>
+                )}
+
+                {/* Credit: Credit Amount input */}
+                {isCredit && (
+                  <Col xs={24} sm={12}>
+                    <div style={{ marginBottom: 4 }}>
+                      <Text type="secondary">Amount on Credit (₹)</Text>
+                      <Tag color="orange" style={{ marginLeft: 6, fontSize: 10 }}>rest of money</Tag>
+                    </div>
+                    <InputNumber
+                      value={creditAmount}
+                      onChange={(v) => setCreditAmount(Math.min(grand, Math.max(0, v || 0)))}
+                      min={0} max={grand}
+                      style={{ width: '100%' }} size="large"
+                      placeholder={`Max ₹${grand}`}
+                    />
+                  </Col>
+                )}
+
+                {/* Change / Balance display */}
+                <Col xs={24} sm={isCredit ? 24 : 8}>
+                  {isCredit ? (
+                    <Row gutter={12}>
+                      <Col xs={12}>
+                        <div style={{
+                          background: token.colorWarningBg,
+                          border: `1px solid ${token.colorWarningBorder}`,
+                          borderRadius: 10, padding: '10px 14px', textAlign: 'center',
+                        }}>
+                          <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 4 }}>On Credit</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: '#e65100' }}>₹{creditAmount.toLocaleString()}</div>
+                        </div>
+                      </Col>
+                      <Col xs={12}>
+                        <div style={{
+                          background: token.colorSuccessBg,
+                          border: `1px solid ${token.colorSuccessBorder}`,
+                          borderRadius: 10, padding: '10px 14px', textAlign: 'center',
+                        }}>
+                          <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 4 }}>Collected Now</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: '#2e7d32' }}>₹{upfront.toLocaleString()}</div>
+                        </div>
+                      </Col>
+                    </Row>
                   ) : (
                     <Statistic
                       title="Change / Balance"
                       value={`₹${change.toLocaleString()}`}
-                      valueStyle={{ color: change >= 0 ? '#2E7D32' : '#C62828' }}
+                      styles={{ content: { color: change >= 0 ? '#2E7D32' : '#C62828' } }}
                     />
                   )}
                 </Col>
               </Row>
 
+              {/* Full credit alert */}
               {isCredit && !isPartialCredit && (
                 <Alert
-                  type="warning"
-                  showIcon
+                  type="warning" showIcon
                   icon={<ExclamationCircleOutlined />}
-                  message={`Credit sale — ₹${Math.abs(Math.min(change, 0)).toLocaleString()} will be added to customer's balance`}
+                  message={`Full credit sale — ₹${creditAmount.toLocaleString()} will be added to customer's outstanding balance`}
                   style={{ marginTop: 12 }}
                 />
               )}
 
+              {/* Partial credit: choose how upfront is collected */}
               {isPartialCredit && (
                 <div style={{
-                  marginTop: 12, padding: '14px 16px',
-                  background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 10,
+                  marginTop: 14, padding: '14px 16px',
+                  background: token.colorWarningBg,
+                  border: `1px solid ${token.colorWarningBorder}`,
+                  borderRadius: 12,
                 }}>
-                  <div style={{ marginBottom: 10 }}>
-                    <Text strong style={{ color: '#e65100' }}>
-                      💰 Partial Payment — How is customer paying ₹{amountPaid.toLocaleString()} now?
-                    </Text>
+                  <Text strong style={{ color: token.colorText }}>
+                    💰 How is ₹{upfront.toLocaleString()} being collected now?
+                  </Text>
+                  <div style={{ marginTop: 10 }}>
+                    <Radio.Group
+                      value={splitPayMode}
+                      onChange={(e) => setSplitPayMode(e.target.value)}
+                      buttonStyle="solid"
+                    >
+                      <Radio.Button value="Cash">💵 Cash</Radio.Button>
+                      <Radio.Button value="UPI">📱 UPI</Radio.Button>
+                      <Radio.Button value="Credit Card">💳 Credit Card</Radio.Button>
+                      <Radio.Button value="Debit Card">🏧 Debit</Radio.Button>
+                    </Radio.Group>
                   </div>
-                  <Radio.Group
-                    value={splitPayMode}
-                    onChange={(e) => setSplitPayMode(e.target.value)}
-                    buttonStyle="solid"
-                  >
-                    <Radio.Button value="Cash">💵 Cash</Radio.Button>
-                    <Radio.Button value="UPI">📱 UPI</Radio.Button>
-                    <Radio.Button value="Credit Card">💳 Credit Card</Radio.Button>
-                    <Radio.Button value="Debit Card">🏧 Debit Card</Radio.Button>
-                  </Radio.Group>
-                  <div style={{ marginTop: 10, fontSize: 13, color: '#795548' }}>
-                    ✅ <b>₹{amountPaid.toLocaleString()}</b> collected via <b>{splitPayMode}</b>
+                  <div style={{ marginTop: 10, fontSize: 13, color: token.colorTextSecondary }}>
+                    ✅ <Text strong>₹{upfront.toLocaleString()}</Text> via <Text strong>{splitPayMode}</Text>
                     &nbsp;+&nbsp;
-                    <b>₹{(grand - amountPaid).toLocaleString()}</b> on credit (added to balance)
+                    <Text strong style={{ color: '#e65100' }}>₹{creditAmount.toLocaleString()}</Text> on credit
                   </div>
                 </div>
               )}
