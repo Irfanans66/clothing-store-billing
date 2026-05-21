@@ -161,6 +161,7 @@ class CustomerOut(BaseModel):
     gst_no: Optional[str]
     loyalty_pts: int
     total_purchase: float
+    credit_balance: float = 0.0
     member_since: Optional[str]
     member_type: str
     notes: Optional[str]
@@ -294,6 +295,7 @@ class BillOut(BaseModel):
     cashier: Optional[str]
     status: Optional[str]
     notes: Optional[str]
+    share_token: Optional[str] = None
     created_at: Optional[datetime]
     items: List[BillItemOut] = []
 

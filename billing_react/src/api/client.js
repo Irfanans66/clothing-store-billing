@@ -55,6 +55,8 @@ export const getBill = (billNo) => api.get(`/bills/${billNo}`)
 export const createBill = (data) => api.post('/bills/', data)
 export const getReceiptPdfUrl = (billNo) =>
   `${BASE}/bills/${billNo}/receipt-pdf`
+export const getPublicReceiptUrl = (shareToken) =>
+  `${BASE}/bills/public/${shareToken}`
 
 // ── Team ──────────────────────────────────────────────────────────────────────
 export const getTeam = () => api.get('/store-users/')

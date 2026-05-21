@@ -90,6 +90,7 @@ class Customer(Base):
     gst_no          = Column(String(20))
     loyalty_pts     = Column(Integer, default=0)
     total_purchase  = Column(Float, default=0.0)
+    credit_balance  = Column(Float, default=0.0)
     member_since    = Column(String(20))
     member_type     = Column(String(20), default="Regular")
     notes           = Column(Text)
@@ -149,6 +150,7 @@ class Bill(Base):
     cashier = Column(String(50))
     status = Column(String(20), default="Paid")
     notes = Column(Text)
+    share_token = Column(String(36), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     # Relationship
 

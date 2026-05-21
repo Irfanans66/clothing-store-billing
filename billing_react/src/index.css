@@ -5,6 +5,8 @@ body {
   font-family: 'Inter', 'Segoe UI', sans-serif;
   background: #f0f2f5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  transition: background 0.2s;
 }
 
 #root { min-height: 100vh; }
@@ -17,3 +19,67 @@ body {
 ::-webkit-scrollbar-track { background: #f0f2f5; }
 ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
 
+/* ── Mobile friendly touch targets ── */
+@media (max-width: 767px) {
+  /* Bigger tap targets */
+  .ant-btn { min-height: 38px; }
+
+  /* Ant Design table on mobile */
+  .ant-table { font-size: 13px !important; }
+  .ant-table-cell { padding: 8px 6px !important; }
+
+  /* Cards more compact */
+  .ant-card-head { padding: 0 12px !important; min-height: 44px !important; }
+  .ant-card-body { padding: 12px !important; }
+
+  /* InputNumber on mobile */
+  .ant-input-number { font-size: 15px !important; }
+
+  /* Statistic value smaller */
+  .ant-statistic-content-value { font-size: 16px !important; }
+
+  /* Select dropdown */
+  .ant-select-selector { font-size: 15px !important; }
+
+  /* Make modals full-width on mobile */
+  .ant-modal { margin: 8px auto !important; }
+  .ant-modal-body { padding: 12px !important; }
+
+  /* Prevent text overflow */
+  .ant-typography { word-break: break-word; }
+
+  /* Drawer body scroll */
+  .ant-drawer-body { overflow-y: auto; }
+}
+
+/* ── Billing page specific ── */
+@media (max-width: 767px) {
+  /* Stack payment mode options vertically */
+  .pay-mode-group .ant-radio-button-wrapper {
+    display: block;
+    margin-bottom: 4px;
+    border-radius: 6px !important;
+    border-left-width: 1px !important;
+  }
+
+  /* Receipt card on mobile: reduce font */
+  .thermal { font-size: 11px !important; }
+}
+
+/* ── Global input focus glow ── */
+.ant-input:focus,
+.ant-input-number-focused,
+.ant-select-focused .ant-select-selector {
+  border-color: #1A237E !important;
+  box-shadow: 0 0 0 2px rgba(26,35,126,0.15) !important;
+}
+
+/* ── Primary color overrides ── */
+.ant-btn-primary {
+  background: #1A237E;
+  border-color: #1A237E;
+}
+.ant-btn-primary:hover {
+  background: #283593 !important;
+  border-color: #283593 !important;
+}

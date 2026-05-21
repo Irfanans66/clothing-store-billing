@@ -16,6 +16,25 @@ settings = get_settings()
 Base.metadata.create_all(bind=engine)
 
 
+# ── Migrate existing tables (add new columns if missing) ─────────────────────
+def _migrate_db():
+    from sqlalchemy import text
+    db = SessionLocal()
+    migrations = [
+        "ALTER TABLE bills ADD COLUMN share_token TEXT",
+        "ALTER TABLE customers ADD COLUMN credit_balance REAL DEFAULT 0.0",
+    ]
+    for stmt in migrations:
+        try:
+            db.execute(text(stmt))
+            db.commit()
+        except Exception:
+            db.rollback()
+    db.close()
+
+_migrate_db()
+
+
 # ── Seed super admin if not exists ───────────────────────────────────────────
 def seed_super_admin():
     db = SessionLocal()
