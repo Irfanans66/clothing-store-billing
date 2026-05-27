@@ -53,6 +53,8 @@ export const adjustStock = (id, delta) =>
 export const getBills = (params = {}) => api.get('/bills/', { params })
 export const getBill = (billNo) => api.get(`/bills/${billNo}`)
 export const createBill = (data) => api.post('/bills/', data)
+export const returnBillItems = (billNo, data) => api.post(`/bills/${billNo}/return`, data)
+export const voidBill = (billNo) => api.delete(`/bills/${billNo}`)
 export const getReceiptPdfUrl = (billNo) =>
   `${BASE}/bills/${billNo}/receipt-pdf`
 export const getPublicReceiptUrl = (shareToken) =>
