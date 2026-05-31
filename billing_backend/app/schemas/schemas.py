@@ -298,6 +298,7 @@ class BillOut(BaseModel):
     share_token: Optional[str] = None
     created_at: Optional[datetime]
     items: List[BillItemOut] = []
+    returns: List["ReturnOut"] = []
 
 class BillSummary(BaseModel):
     """Lightweight bill list item (no line items)."""
@@ -309,6 +310,48 @@ class BillSummary(BaseModel):
     grand_total: float
     payment_mode: Optional[str]
     status: Optional[str]
+
+
+# ── Bill Returns ─────────────────────────────────────────────────────────────
+
+class ReturnItemIn(BaseModel):
+    bill_item_id: int
+    return_qty: int
+
+    @field_validator("return_qty")
+    @classmethod
+    def positive_qty(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("Return quantity must be at least 1")
+        return v
+
+class ReturnRequest(BaseModel):
+    items: List[ReturnItemIn]
+    refund_method: str = "Cash"  # "Cash" or "Store Credit"
+    notes: Optional[str] = ""
+
+class ReturnItemOut(BaseModel):
+    model_config = {"from_attributes": True}
+    id: int
+    bill_item_id: int
+    item_id: Optional[str]
+    product_name: Optional[str]
+    return_qty: int
+    refund_per_item: float
+    refund_subtotal: float
+
+class ReturnOut(BaseModel):
+    model_config = {"from_attributes": True}
+    id: int
+    bill_no: str
+    return_date: Optional[str]
+    return_time: Optional[str]
+    refund_amount: float
+    refund_method: str
+    processed_by: Optional[str]
+    notes: Optional[str]
+    created_at: Optional[datetime]
+    return_items: List[ReturnItemOut] = []
 
 
 # ── Dashboard / Reports ───────────────────────────────────────────────────────

@@ -12,8 +12,8 @@ from sqlalchemy import text
 
 from app.core.database import get_db
 from app.core.deps import require_store_access
-from app.models.models import Bill, BillItem, Customer, Store
-from app.schemas.schemas import BillCreate, BillOut, BillSummary, MessageResponse
+from app.models.models import Bill, BillItem, BillReturn, BillReturnItem, Customer, Product, Store
+from app.schemas.schemas import BillCreate, BillOut, BillSummary, MessageResponse, ReturnRequest, ReturnOut
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
 
@@ -301,6 +301,7 @@ def create_bill(
              "gst_pct": r[13], "gst_amt": r[14], "total": r[15]}
             for r in raw_items
         ],
+        "returns": [],
     }
 
 
@@ -348,6 +349,29 @@ def get_public_receipt(
     )
 
 
+def _bill_returns_data(db: Session, bill_id: int) -> list:
+    """Fetch all returns for a bill as dicts for BillOut.returns."""
+    returns = db.query(BillReturn).filter(BillReturn.bill_id == bill_id).order_by(BillReturn.id).all()
+    result = []
+    for r in returns:
+        result.append({
+            "id": r.id, "bill_no": r.bill_no, "return_date": r.return_date,
+            "return_time": r.return_time, "refund_amount": r.refund_amount,
+            "refund_method": r.refund_method, "processed_by": r.processed_by,
+            "notes": r.notes, "created_at": r.created_at,
+            "return_items": [
+                {
+                    "id": ri.id, "bill_item_id": ri.bill_item_id,
+                    "item_id": ri.item_id, "product_name": ri.product_name,
+                    "return_qty": ri.return_qty, "refund_per_item": ri.refund_per_item,
+                    "refund_subtotal": ri.refund_subtotal,
+                }
+                for ri in r.return_items
+            ],
+        })
+    return result
+
+
 # ── GET /bills/{bill_no} ───────────────────────────────────────────────────────
 @router.get("/{bill_no}", response_model=BillOut)
 def get_bill(
@@ -382,6 +406,7 @@ def get_bill(
              "gst_pct": r[13], "gst_amt": r[14], "total": r[15]}
             for r in raw_items
         ],
+        "returns": _bill_returns_data(db, bill.id),
     }
 
 
@@ -410,6 +435,152 @@ def get_receipt_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="Receipt_{bill_no}.pdf"'},
     )
+
+
+# ── POST /bills/{bill_no}/return ──────────────────────────────────────────────
+@router.post("/{bill_no}/return", response_model=ReturnOut)
+def return_bill_items(
+    bill_no: str,
+    payload: ReturnRequest,
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    sc      = identity["store_code"]
+    cashier = identity["username"]
+
+    bill = db.query(Bill).filter(Bill.store_code == sc, Bill.bill_no == bill_no).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found.")
+    if bill.status in ("Void", "Returned"):
+        raise HTTPException(status_code=400, detail=f"Cannot return items on a {bill.status} bill.")
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="No items specified for return.")
+
+    # Build map of bill_item_id -> BillItem for this bill
+    bill_items = {bi.id: bi for bi in db.query(BillItem).filter(BillItem.bill_id == bill.id).all()}
+
+    # Build map of bill_item_id -> already_returned_qty from previous returns
+    already_returned: dict[int, int] = {}
+    prev_returns = db.query(BillReturnItem).join(
+        BillReturn, BillReturnItem.return_id == BillReturn.id
+    ).filter(BillReturn.bill_id == bill.id).all()
+    for pri in prev_returns:
+        already_returned[pri.bill_item_id] = already_returned.get(pri.bill_item_id, 0) + pri.return_qty
+
+    total_refund = 0.0
+    return_item_rows = []
+
+    for req_item in payload.items:
+        bi = bill_items.get(req_item.bill_item_id)
+        if not bi:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Item ID {req_item.bill_item_id} does not belong to bill {bill_no}."
+            )
+        max_returnable = bi.qty - already_returned.get(bi.id, 0)
+        if req_item.return_qty > max_returnable:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot return {req_item.return_qty} of '{bi.product_name}'. "
+                       f"Max returnable: {max_returnable}."
+            )
+
+        refund_per_item = round(bi.total / bi.qty, 2) if bi.qty else 0.0
+        refund_subtotal = round(refund_per_item * req_item.return_qty, 2)
+        total_refund += refund_subtotal
+
+        return_item_rows.append({
+            "bill_item_id":    bi.id,
+            "item_id":         bi.item_id,
+            "product_name":    bi.product_name,
+            "return_qty":      req_item.return_qty,
+            "refund_per_item": refund_per_item,
+            "refund_subtotal": refund_subtotal,
+        })
+
+    total_refund = round(total_refund, 2)
+    now = datetime.datetime.now()
+
+    try:
+        # Create return record
+        bill_return = BillReturn(
+            store_code    = sc,
+            bill_id       = bill.id,
+            bill_no       = bill_no,
+            return_date   = now.strftime("%Y-%m-%d"),
+            return_time   = now.strftime("%I:%M %p"),
+            refund_amount = total_refund,
+            refund_method = payload.refund_method,
+            processed_by  = cashier,
+            notes         = payload.notes or "",
+        )
+        db.add(bill_return)
+        db.flush()
+
+        for row in return_item_rows:
+            db.add(BillReturnItem(return_id=bill_return.id, **row))
+
+        # Restore stock for returned products
+        for row in return_item_rows:
+            if row["item_id"] and row["item_id"] != "CUSTOM":
+                prod = db.query(Product).filter(
+                    Product.store_code == sc,
+                    Product.item_id    == row["item_id"],
+                ).first()
+                if prod:
+                    prod.stock_qty = (prod.stock_qty or 0) + row["return_qty"]
+
+        # Update bill status
+        all_returned = True
+        for bi in bill_items.values():
+            returned_so_far = already_returned.get(bi.id, 0)
+            for row in return_item_rows:
+                if row["bill_item_id"] == bi.id:
+                    returned_so_far += row["return_qty"]
+            if returned_so_far < bi.qty:
+                all_returned = False
+                break
+        bill.status = "Returned" if all_returned else "Partial Return"
+
+        # Adjust customer totals
+        if bill.customer_id and bill.customer_id != "WALKIN":
+            cust = db.query(Customer).filter(
+                Customer.store_code  == sc,
+                Customer.customer_id == bill.customer_id,
+            ).first()
+            if cust:
+                cust.total_purchase = max(0.0, round((cust.total_purchase or 0) - total_refund, 2))
+                pts_deduct = int(total_refund // 100)
+                cust.loyalty_pts = max(0, (cust.loyalty_pts or 0) - pts_deduct)
+                if payload.refund_method == "Store Credit":
+                    cust.credit_balance = round((cust.credit_balance or 0) + total_refund, 2)
+
+        db.commit()
+        db.refresh(bill_return)
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Return failed: {str(e)}")
+
+    return {
+        "id": bill_return.id, "bill_no": bill_return.bill_no,
+        "return_date": bill_return.return_date, "return_time": bill_return.return_time,
+        "refund_amount": bill_return.refund_amount, "refund_method": bill_return.refund_method,
+        "processed_by": bill_return.processed_by, "notes": bill_return.notes,
+        "created_at": bill_return.created_at,
+        "return_items": [
+            {
+                "id": ri.id, "bill_item_id": ri.bill_item_id,
+                "item_id": ri.item_id, "product_name": ri.product_name,
+                "return_qty": ri.return_qty, "refund_per_item": ri.refund_per_item,
+                "refund_subtotal": ri.refund_subtotal,
+            }
+            for ri in bill_return.return_items
+        ],
+    }
 
 
 # ── DELETE /bills/{bill_no} ────────────────────────────────────────────────────

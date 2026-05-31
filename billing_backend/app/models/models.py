@@ -184,6 +184,40 @@ class BillItem(Base):
     bill = relationship( "Bill", back_populates="items" )
 
 
+# ── Bill Returns ──────────────────────────────────────────────────────────────
+class BillReturn(Base):
+    __tablename__ = "bill_returns"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    store_code    = Column(String(20), ForeignKey("stores.store_code", ondelete="CASCADE"), nullable=False)
+    bill_id       = Column(Integer, ForeignKey("bills.id", ondelete="CASCADE"), nullable=False)
+    bill_no       = Column(String(20), nullable=False)
+    return_date   = Column(String(20))
+    return_time   = Column(String(20))
+    refund_amount = Column(Float, default=0.0)
+    refund_method = Column(String(20), default="Cash")
+    processed_by  = Column(String(50))
+    notes         = Column(Text)
+    created_at    = Column(DateTime, default=_now)
+
+    return_items  = relationship("BillReturnItem", back_populates="bill_return", cascade="all, delete-orphan")
+
+
+class BillReturnItem(Base):
+    __tablename__ = "bill_return_items"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    return_id       = Column(Integer, ForeignKey("bill_returns.id", ondelete="CASCADE"), nullable=False)
+    bill_item_id    = Column(Integer, ForeignKey("bill_items.id", ondelete="CASCADE"), nullable=False)
+    item_id         = Column(String(20))
+    product_name    = Column(String(200))
+    return_qty      = Column(Integer)
+    refund_per_item = Column(Float)
+    refund_subtotal = Column(Float)
+
+    bill_return = relationship("BillReturn", back_populates="return_items")
+
+
 # ── Super Admin (global, not per-store) ──────────────────────────────────────
 class SuperAdmin(Base):
     __tablename__ = "super_admins"
