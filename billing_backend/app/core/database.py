@@ -10,17 +10,20 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+# Railway gives postgres:// but SQLAlchemy 2.x requires postgresql://
+_db_url = settings.DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 # SQLite needs check_same_thread=False; PostgreSQL ignores connect_args
-connect_args = {"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+connect_args = {"check_same_thread": False} if "sqlite" in _db_url else {}
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    _db_url,
     connect_args=connect_args,
-    echo=settings.DEBUG,           # logs SQL in dev
+    echo=settings.DEBUG,
 )
 
 # Enable WAL mode for SQLite (better concurrent reads)
-if "sqlite" in settings.DATABASE_URL:
+if "sqlite" in _db_url:
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_conn, _):
         cursor = dbapi_conn.cursor()
