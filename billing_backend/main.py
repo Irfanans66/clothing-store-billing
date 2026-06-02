@@ -1,8 +1,11 @@
 """
 main.py  —  FastAPI application entry point
 """
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.core.database import engine, Base, SessionLocal
@@ -113,17 +116,26 @@ app.include_router(store_users.router, prefix=PREFIX)
 app.include_router(admin.router,      prefix=PREFIX)
 
 
-# ── Root endpoints ────────────────────────────────────────────────────────────
-@app.get("/")
-def root():
-    return {
-        "app": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "docs": "/docs",
-        "status": "running ✅",
-    }
+# ── Serve React frontend ──────────────────────────────────────────────────────
+_DIST = os.path.join(os.path.dirname(__file__), "dist")
+if os.path.isdir(_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_DIST, "assets")), name="assets")
 
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+    @app.get("/{full_path:path}")
+    def serve_frontend(full_path: str):
+        file_path = os.path.join(_DIST, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(_DIST, "index.html"))
+else:
+    @app.get("/")
+    def root():
+        return {"app": settings.APP_NAME, "version": settings.APP_VERSION, "status": "running ✅"}
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
