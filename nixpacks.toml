@@ -1,16 +1,12 @@
 [phases.setup]
 nixPkgs = ["nodejs_20", "python311", "libjpeg", "zlib", "freetype", "libpng"]
 
-[phases.install]
-cmds = [
-  "pip install -r billing_backend/requirements.txt"
-]
-
 [phases.build]
 cmds = [
+  "python3.11 -m pip install -r billing_backend/requirements.txt",
   "cd billing_react && npm install && npm run build",
   "cp -r billing_react/dist billing_backend/dist"
 ]
 
 [start]
-cmd = "cd billing_backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+cmd = "cd billing_backend && python3.11 -m uvicorn main:app --host 0.0.0.0 --port $PORT"
