@@ -58,7 +58,7 @@ export const voidBill = (billNo) => api.delete(`/bills/${billNo}`)
 export const getReceiptPdfUrl = (billNo) =>
   `${BASE}/bills/${billNo}/receipt-pdf`
 export const getPublicReceiptUrl = (shareToken) =>
-  `${BASE}/bills/public/${shareToken}`
+  `${window.location.origin}/api/v1/bills/public/${shareToken}`
 
 // ── Team ──────────────────────────────────────────────────────────────────────
 export const getTeam = () => api.get('/store-users/')
