@@ -1,5 +1,10 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311"]
+nixPkgs = ["nodejs_20", "python311", "libjpeg", "zlib", "freetype", "libpng"]
+
+[phases.install]
+cmds = [
+  "pip install -r billing_backend/requirements.txt"
+]
 
 [phases.build]
 cmds = [
