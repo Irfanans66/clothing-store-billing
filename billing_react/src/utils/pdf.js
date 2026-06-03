@@ -1,4 +1,4 @@
-const BASE = (import.meta.env.VITE_API_URL || 'https://clothing.up.railway.app') + '/api/v1'
+const BASE = (import.meta.env.VITE_API_URL || '') + '/api/v1'
 
 async function _fetchPdfBlob(path) {
   const token = localStorage.getItem('token')
