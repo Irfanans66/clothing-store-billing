@@ -21,3 +21,16 @@ env/
 # IDEs
 .idea/
 .vscode/
+
+# Node
+node_modules/
+billing_react/node_modules/
+
+# Build output (built on Railway)
+billing_react/dist/
+billing_backend/dist/
+
+# Unrelated folders
+billing_android/
+clothing-store-billing/
+documents/
