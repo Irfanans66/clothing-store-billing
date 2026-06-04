@@ -34,3 +34,9 @@ billing_backend/dist/
 billing_android/
 clothing-store-billing/
 documents/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
