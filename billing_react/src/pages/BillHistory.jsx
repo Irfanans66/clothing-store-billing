@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Card, Table, Input, Select, Button, Space, Tag, Typography,
-  Modal, Descriptions, Divider, message, InputNumber, Form, Alert,
+  Modal, Descriptions, Divider, message, InputNumber, Form, Alert, AutoComplete, Spin,
 } from 'antd'
 import { SearchOutlined, PrinterOutlined, RollbackOutlined } from '@ant-design/icons'
-import { getBills, getBill, returnBillItems } from '../api/client'
+import { getBills, getBill, returnBillItems, getCustomers } from '../api/client'
 import { printPdfWithAuth } from '../utils/pdf'
 
 const { Title, Text } = Typography
@@ -22,6 +22,32 @@ export default function BillHistory() {
   const [bills, setBills] = useState([])
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState({ date: '', customer: '', payment_mode: '' })
+  const [custOptions, setCustOptions] = useState([])
+  const [custLoading, setCustLoading] = useState(false)
+  const custDebounceRef = useRef(null)
+
+  function onCustInput(val) {
+    setFilters(f => ({ ...f, customer: val }))
+    if (custDebounceRef.current) clearTimeout(custDebounceRef.current)
+    if (!val.trim()) { setCustOptions([]); return }
+    custDebounceRef.current = setTimeout(async () => {
+      setCustLoading(true)
+      try {
+        const res = await getCustomers({ search: val.trim() })
+        setCustOptions((res || []).map(c => ({
+          key: c.customer_id,
+          value: c.name,
+          label: (
+            <span>
+              <Text strong>{c.name}</Text>
+              {c.phone && <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>{c.phone}</Text>}
+            </span>
+          ),
+        })))
+      } catch { }
+      finally { setCustLoading(false) }
+    }, 300)
+  }
 
   // detail modal
   const [detailBill, setDetailBill] = useState(null)
@@ -174,12 +200,20 @@ export default function BillHistory() {
             onChange={(e) => setFilters({ ...filters, date: e.target.value })}
             prefix={<SearchOutlined />} style={{ width: 200 }}
           />
-          <Input
-            placeholder="Filter by customer"
+          <AutoComplete
+            style={{ width: 200 }}
             value={filters.customer}
-            onChange={(e) => setFilters({ ...filters, customer: e.target.value })}
-            prefix={<SearchOutlined />} style={{ width: 180 }}
-          />
+            options={custOptions}
+            onSearch={onCustInput}
+            onChange={onCustInput}
+            onSelect={(val) => { setFilters(f => ({ ...f, customer: val })); setCustOptions([]) }}
+            allowClear
+            onClear={() => { setFilters(f => ({ ...f, customer: '' })); setCustOptions([]) }}
+            notFoundContent={custLoading ? <Spin size="small" /> : null}
+            placeholder="Search customer..."
+          >
+            <Input prefix={<SearchOutlined />} suffix={custLoading ? <Spin size="small" /> : null} />
+          </AutoComplete>
           <Select
             placeholder="Payment Mode" value={filters.payment_mode || undefined}
             onChange={(v) => setFilters({ ...filters, payment_mode: v })}
