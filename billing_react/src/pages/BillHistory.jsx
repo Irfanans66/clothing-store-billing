@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Card, Table, Input, Select, Button, Space, Tag, Typography,
   Modal, Descriptions, Divider, message, InputNumber, Form, Alert, AutoComplete, Spin,
@@ -21,7 +22,12 @@ const STATUS_COLORS = {
 export default function BillHistory() {
   const [bills, setBills] = useState([])
   const [loading, setLoading] = useState(false)
-  const [filters, setFilters] = useState({ date: '', customer: '', payment_mode: '' })
+  const [searchParams] = useSearchParams()
+  const [filters, setFilters] = useState({
+    date: '',
+    customer: searchParams.get('customer') || '',
+    payment_mode: '',
+  })
   const [custOptions, setCustOptions] = useState([])
   const [custLoading, setCustLoading] = useState(false)
   const custDebounceRef = useRef(null)
