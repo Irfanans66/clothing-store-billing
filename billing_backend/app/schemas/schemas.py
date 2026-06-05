@@ -308,6 +308,8 @@ class BillSummary(BaseModel):
     bill_date: Optional[str]
     customer_name: Optional[str]
     grand_total: float
+    amount_paid: float = 0.0
+    change_amt: float = 0.0
     payment_mode: Optional[str]
     status: Optional[str]
 

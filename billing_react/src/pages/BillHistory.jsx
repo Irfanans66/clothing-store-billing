@@ -178,6 +178,12 @@ export default function BillHistory() {
       render: (v) => <Tag color={STATUS_COLORS[v] || 'default'}>{v}</Tag>,
     },
     {
+      title: 'Balance Due', dataIndex: 'change_amt', key: 'change_amt', width: 110,
+      render: (v) => v < 0
+        ? <Tag color="red">₹{Math.abs(Math.round(v)).toLocaleString()}</Tag>
+        : <Tag color="green">Paid</Tag>,
+    },
+    {
       title: '', key: 'action',
       render: (_, rec) => (
         <Button
