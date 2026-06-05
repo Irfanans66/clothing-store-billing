@@ -899,7 +899,8 @@ export default function NewBill() {
                     size={isMobile ? 'small' : 'middle'}
                     onClick={async () => {
                       try {
-                        await printPdfWithAuth(`/bills/${lastBill.bill_no}/receipt-pdf`)
+                        const paper = localStorage.getItem('receipt_paper_size') || '3inch'
+                        await printPdfWithAuth(`/bills/${lastBill.bill_no}/receipt-pdf?paper=${paper}`)
                       } catch (err) {
                         message.error('Print failed: ' + err.message)
                       }

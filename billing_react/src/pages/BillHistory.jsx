@@ -151,7 +151,10 @@ export default function BillHistory() {
         <Button
           size="small" icon={<PrinterOutlined />}
           onClick={async () => {
-            try { await printPdfWithAuth(`/bills/${rec.bill_no}/receipt-pdf`) }
+            try {
+              const paper = localStorage.getItem('receipt_paper_size') || '3inch'
+              await printPdfWithAuth(`/bills/${rec.bill_no}/receipt-pdf?paper=${paper}`)
+            }
             catch (err) { message.error('PDF failed: ' + err.message) }
           }}
         >PDF</Button>
@@ -213,7 +216,10 @@ export default function BillHistory() {
           ),
           <Button key="pdf" type="primary" icon={<PrinterOutlined />}
             onClick={async () => {
-              try { await printPdfWithAuth(`/bills/${detailBill?.bill_no}/receipt-pdf`) }
+              try {
+                const paper = localStorage.getItem('receipt_paper_size') || '3inch'
+                await printPdfWithAuth(`/bills/${detailBill?.bill_no}/receipt-pdf?paper=${paper}`)
+              }
               catch (err) { message.error('PDF failed: ' + err.message) }
             }}>
             Print PDF

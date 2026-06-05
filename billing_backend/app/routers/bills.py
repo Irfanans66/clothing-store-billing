@@ -76,7 +76,7 @@ def _compute_bill(items_in, discount: float, discount_type: str, amount_paid: fl
     return line_items, raw_sub, disc_amt, adj_gst, grand, change
 
 
-def _generate_receipt_pdf(bill, raw_items, store) -> bytes:
+def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> bytes:
     """Generate thermal receipt PDF bytes. Reusable by both auth and public endpoints."""
     try:
         from reportlab.pdfgen import canvas as rl_canvas
@@ -85,39 +85,53 @@ def _generate_receipt_pdf(bill, raw_items, store) -> bytes:
     except ImportError:
         raise HTTPException(status_code=500, detail="reportlab not installed.")
 
+    is_2inch = paper_size == "2inch"
     upi_id    = (store.upi_id or "").strip() if store else ""
-    has_qr    = bool(upi_id)
-    qr_size_mm = 32 if has_qr else 0
+    has_qr    = bool(upi_id) and not is_2inch  # skip QR on 2-inch to save space
+    qr_size_mm = 28 if has_qr else 0
 
-    W   = 80 * mm
+    W   = (58 if is_2inch else 80) * mm
     buf = io.BytesIO()
-    H   = (85 + len(raw_items) * 15 + 65 + (qr_size_mm + 22 if has_qr else 0)) * mm
+    H   = (75 + len(raw_items) * 13 + 55 + (qr_size_mm + 18 if has_qr else 0)) * mm if is_2inch \
+          else (85 + len(raw_items) * 15 + 65 + (qr_size_mm + 22 if has_qr else 0)) * mm
     c   = rl_canvas.Canvas(buf, pagesize=(W, H))
-    y   = H - 6 * mm
+    y   = H - 5 * mm
 
-    def ctr(txt, font="Courier-Bold", sz=9):
+    # font/layout constants differ by paper size
+    _ctr_sz  = 8  if is_2inch else 9
+    _lft_sz  = 7  if is_2inch else 8
+    _rw_sz   = 7  if is_2inch else 8
+    _dash_ch = 32 if is_2inch else 44
+    _lft_max = 36 if is_2inch else 50
+    _rw_max  = 22 if is_2inch else 32
+    _pad     = 2 * mm
+
+    def ctr(txt, font="Courier-Bold", sz=None):
         nonlocal y
+        sz = sz or _ctr_sz
         c.setFont(font, sz)
         c.drawCentredString(W / 2, y, str(txt))
         y -= (sz + 3) * 0.8 * mm
 
-    def lft(txt, font="Courier", sz=8):
+    def lft(txt, font="Courier", sz=None):
         nonlocal y
+        sz = sz or _lft_sz
         c.setFont(font, sz)
-        c.drawString(3 * mm, y, str(txt)[:50])
+        c.drawString(_pad, y, str(txt)[:_lft_max])
         y -= (sz + 2) * 0.75 * mm
 
-    def rw(lt, rt, bold=False, sz=8):
+    def rw(lt, rt, bold=False, sz=None):
         nonlocal y
+        sz = sz or _rw_sz
         c.setFont("Courier-Bold" if bold else "Courier", sz)
-        c.drawString(3 * mm, y, str(lt)[:32])
-        c.drawRightString(W - 3 * mm, y, str(rt))
+        c.drawString(_pad, y, str(lt)[:_rw_max])
+        c.drawRightString(W - _pad, y, str(rt))
         y -= (sz + 2) * 0.75 * mm
 
     def dash():
         nonlocal y
         c.setFont("Courier", 7)
-        c.drawCentredString(W / 2, y, "-" * 44)
+        c.drawCentredString(W / 2, y, "-" * _dash_ch)
         y -= 3.2 * mm
 
     ctr(store.store_name if store else "STORE", sz=11)
@@ -328,6 +342,7 @@ def list_bills(
 @router.get("/public/{share_token}")
 def get_public_receipt(
     share_token: str,
+    paper: str = "3inch",
     db: Session = Depends(get_db),
 ):
     bill = db.query(Bill).filter(Bill.share_token == share_token).first()
@@ -341,7 +356,7 @@ def get_public_receipt(
 
     store = db.query(Store).filter(Store.store_code == bill.store_code).first()
 
-    pdf_bytes = _generate_receipt_pdf(bill, raw_items, store)
+    pdf_bytes = _generate_receipt_pdf(bill, raw_items, store, paper_size=paper)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -414,6 +429,7 @@ def get_bill(
 @router.get("/{bill_no}/receipt-pdf")
 def get_receipt_pdf(
     bill_no: str,
+    paper: str = "3inch",
     identity: dict = Depends(require_store_access),
     db: Session = Depends(get_db),
 ):
@@ -428,7 +444,7 @@ def get_receipt_pdf(
     ).fetchall()
 
     store = db.query(Store).filter(Store.store_code == sc).first()
-    pdf_bytes = _generate_receipt_pdf(bill, raw_items, store)
+    pdf_bytes = _generate_receipt_pdf(bill, raw_items, store, paper_size=paper)
 
     return Response(
         content=pdf_bytes,

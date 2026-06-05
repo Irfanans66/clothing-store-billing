@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Card, Tabs, Form, Input, Button, message, Typography, Alert } from 'antd'
+import { Card, Tabs, Form, Input, Button, message, Typography, Alert, Radio } from 'antd'
 import { getStoreProfile, updateStoreProfile } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 
@@ -26,6 +26,9 @@ export default function Settings() {
   const [upiForm] = Form.useForm()
   const [saving, setSaving] = useState(false)
   const [previewUpi, setPreviewUpi] = useState('')
+  const [paperSize, setPaperSize] = useState(
+    () => localStorage.getItem('receipt_paper_size') || '3inch'
+  )
 
   useEffect(() => {
     getStoreProfile()
@@ -110,6 +113,40 @@ export default function Settings() {
                     </Button>
                   </Form>
                   <UpiQrPreview upiId={previewUpi} storeName={storeName} />
+                </div>
+              ),
+            },
+            {
+              key: 'receipt',
+              label: '🖨️ Receipt Size',
+              children: (
+                <div style={{ maxWidth: 480 }}>
+                  <Alert
+                    type="info" showIcon style={{ marginBottom: 20 }}
+                    message="Thermal Printer Paper Size"
+                    description="Choose the paper roll size your thermal printer uses. This setting is saved on this device and applies to all printed receipts."
+                  />
+                  <div style={{ marginBottom: 12, fontWeight: 600 }}>Paper Width</div>
+                  <Radio.Group
+                    value={paperSize}
+                    onChange={(e) => {
+                      setPaperSize(e.target.value)
+                      localStorage.setItem('receipt_paper_size', e.target.value)
+                      message.success(`Receipt size set to ${e.target.value === '2inch' ? '2-inch (58mm)' : '3-inch (80mm)'}`)
+                    }}
+                  >
+                    <Radio.Button value="3inch" style={{ marginRight: 12 }}>
+                      3-inch (80mm) — Standard
+                    </Radio.Button>
+                    <Radio.Button value="2inch">
+                      2-inch (58mm) — Small
+                    </Radio.Button>
+                  </Radio.Group>
+                  <div style={{ marginTop: 16, color: '#888', fontSize: 12 }}>
+                    {paperSize === '2inch'
+                      ? 'Using 2-inch (58mm) paper — compact receipts, no UPI QR code.'
+                      : 'Using 3-inch (80mm) paper — full receipts with UPI QR code support.'}
+                  </div>
                 </div>
               ),
             },
