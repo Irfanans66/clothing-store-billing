@@ -105,10 +105,7 @@ def get_labels(
 
     W, H = wh[0] * MM, wh[1] * MM
     buf = io.BytesIO()
-    # Store the PDF as portrait (H_page > W_page) so printers don't auto-rotate.
-    # We rotate the canvas 90° and draw as if the page is W×H (landscape).
-    W_page, H_page = (H, W) if W > H else (W, H)
-    c = rl_canvas.Canvas(buf, pagesize=(W_page, H_page))
+    c = rl_canvas.Canvas(buf, pagesize=(W, H))
     mg = 1.2 * MM
 
     hdr_h = H * 0.20
@@ -123,13 +120,6 @@ def get_labels(
         mrp_val = float(prod.mrp or 0)
 
         for _ in range(copies):
-            # Rotate content 90° CW so landscape content prints correctly
-            # on portrait-oriented printers (H_page is the full long side).
-            if W > H:
-                c.saveState()
-                c.translate(0, H_page)
-                c.rotate(-90)
-
             c.setStrokeColor(colors.HexColor("#1A237E"))
             c.setLineWidth(0.5)
             c.rect(0, 0, W, H, fill=0, stroke=1)
@@ -170,9 +160,6 @@ def get_labels(
             c.setFont("Helvetica", min(3.5, body_h * 0.14))
             c.drawCentredString(W / 2, bar_bot - 2.2 * MM, bc)
             c.setFillColor(colors.black)
-
-            if W > H:
-                c.restoreState()
             c.showPage()
 
     c.save()
