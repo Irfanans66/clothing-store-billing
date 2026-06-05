@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Card, Row, Col, Input, Button, InputNumber, Select, Table, Space, Tag,
   Typography, Divider, Radio, Statistic, Form, message, Checkbox, Modal,
-  Spin, Alert, Grid, Tooltip, theme as antTheme,
+  Spin, Alert, Grid, Tooltip, theme as antTheme, AutoComplete,
 } from 'antd'
 import {
   SearchOutlined, DeleteOutlined, PlusOutlined, PrinterOutlined,
@@ -89,17 +89,27 @@ export default function NewBill() {
   }, [])
 
   // ── Customer Search ────────────────────────────────────────────────────────
-  async function searchCustomer() {
-    if (!custSearch.trim()) return
+  const searchCustomer = useCallback(async (val) => {
+    const q = (val ?? custSearch).trim()
+    if (!q) { setCustResults([]); return }
     setCustLoading(true)
     try {
-      const res = await getCustomers({ search: custSearch.trim() })
+      const res = await getCustomers({ search: q })
       setCustResults(res || [])
     } catch {
       message.error('Customer search failed')
     } finally {
       setCustLoading(false)
     }
+  }, [custSearch])
+
+  // debounce ref
+  const custDebounceRef = useRef(null)
+  function onCustSearchChange(val) {
+    setCustSearch(val)
+    if (custDebounceRef.current) clearTimeout(custDebounceRef.current)
+    if (!val.trim()) { setCustResults([]); return }
+    custDebounceRef.current = setTimeout(() => searchCustomer(val), 300)
   }
 
   // ── Add to Cart ────────────────────────────────────────────────────────────
@@ -555,41 +565,38 @@ export default function NewBill() {
           >
             {!walkIn && (
               <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
-                <Input
-                  placeholder="Search by name or phone..."
+                <AutoComplete
+                  style={{ flex: 1 }}
                   value={custSearch}
-                  onChange={(e) => setCustSearch(e.target.value)}
-                  onPressEnter={searchCustomer}
-                  prefix={<SearchOutlined />}
-                />
-                <Button type="primary" onClick={searchCustomer} loading={custLoading}>Search</Button>
-                <Button icon={<UserAddOutlined />} onClick={() => setNewCustModal(true)} />
+                  onSearch={onCustSearchChange}
+                  onChange={onCustSearchChange}
+                  onSelect={(val, opt) => {
+                    const c = custResults.find(r => r.customer_id === opt.key)
+                    if (c) { setCustomer(c); setCustSearch(c.name); setCustResults([]) }
+                  }}
+                  options={custResults.map((c) => ({
+                    key: c.customer_id,
+                    value: c.name,
+                    label: (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Text strong>{c.name}</Text>
+                        {c.phone && <Text type="secondary" style={{ fontSize: 12 }}>{c.phone}</Text>}
+                        <Tag color="blue" style={{ fontSize: 11, margin: 0 }}>{c.member_type}</Tag>
+                        {c.credit_balance > 0 && (
+                          <Tag color="red" style={{ fontSize: 11, margin: 0 }}>Due ₹{Math.round(c.credit_balance)}</Tag>
+                        )}
+                      </div>
+                    ),
+                  }))}
+                  notFoundContent={custLoading ? <Spin size="small" /> : custSearch.trim() ? 'No customers found' : null}
+                  placeholder="Search by name or phone..."
+                  allowClear
+                  onClear={() => { setCustSearch(''); setCustResults([]); setCustomer(null) }}
+                >
+                  <Input prefix={<SearchOutlined />} suffix={custLoading ? <Spin size="small" /> : null} />
+                </AutoComplete>
+                <Button icon={<UserAddOutlined />} onClick={() => setNewCustModal(true)} title="Add new customer" />
               </Space.Compact>
-            )}
-
-            {custResults.length > 0 && !walkIn && (
-              <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
-                {custResults.map((c) => (
-                  <div
-                    key={c.customer_id}
-                    onClick={() => { setCustomer(c); setCustResults([]) }}
-                    style={{
-                      padding: '8px 12px', cursor: 'pointer',
-                      background: customer?.customer_id === c.customer_id ? '#e8eaf6' : '#fff',
-                      borderBottom: '1px solid #f5f5f5',
-                    }}
-                  >
-                    <Text strong>{c.name}</Text>
-                    <Text type="secondary" style={{ marginLeft: 8 }}>{c.phone}</Text>
-                    <Tag color="blue" style={{ marginLeft: 8, fontSize: 11 }}>{c.member_type}</Tag>
-                    {(c.credit_balance > 0) && (
-                      <Tag color="red" style={{ marginLeft: 4, fontSize: 11 }}>
-                        Due: ₹{Math.round(c.credit_balance)}
-                      </Tag>
-                    )}
-                  </div>
-                ))}
-              </div>
             )}
 
             {customer && (
