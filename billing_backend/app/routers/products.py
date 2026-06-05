@@ -123,11 +123,11 @@ def get_labels(
         mrp_val = float(prod.mrp or 0)
 
         for _ in range(copies):
-            # Rotate content 90° counter-clockwise so landscape content
-            # prints correctly on portrait-oriented printers.
+            # Rotate content 90° CW so landscape content prints correctly
+            # on portrait-oriented printers (H_page is the full long side).
             if W > H:
                 c.saveState()
-                c.translate(0, W_page)
+                c.translate(0, H_page)
                 c.rotate(-90)
 
             c.setStrokeColor(colors.HexColor("#1A237E"))
