@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Select, InputNumber, Button, Table, Typography, Space, message, Alert } from 'antd'
-import { BarcodeOutlined, PrinterOutlined } from '@ant-design/icons'
+import { Card, Select, InputNumber, Button, Table, Typography, Space, Alert } from 'antd'
+import { PrinterOutlined } from '@ant-design/icons'
 import { getProducts, getStoreProfile } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import JsBarcode from 'jsbarcode'
@@ -15,128 +15,147 @@ const LABEL_SIZES = [
   { value: '100x50', label: '100×50 mm (XL)' },
 ]
 
-function makeBarcodesvg(code) {
+// 203 DPI — standard thermal label printer resolution
+const DPI = 203
+const MM_PER_INCH = 25.4
+
+function mmToPx(mm) {
+  return Math.round((mm / MM_PER_INCH) * DPI)
+}
+
+async function drawLabel(product, W_mm, H_mm, storeName) {
+  const W = mmToPx(W_mm)
+  const H = mmToPx(H_mm)
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')
+
+  const hdrH = Math.round(H * 0.22)
+  const ftrH = Math.round(H * 0.22)
+  const bodyH = H - hdrH - ftrH
+  const pad = Math.round(W * 0.025)
+
+  // White background
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, H)
+
+  // Blue header
+  ctx.fillStyle = '#1A237E'
+  ctx.fillRect(0, 0, W, hdrH)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `bold ${Math.round(hdrH * 0.55)}px Arial`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText((storeName || 'STORE').substring(0, 26), W / 2, hdrH / 2)
+
+  // Product name
+  ctx.fillStyle = '#111111'
+  const nameSize = Math.round(bodyH * 0.22)
+  ctx.font = `bold ${nameSize}px Arial`
+  ctx.textBaseline = 'top'
+  const nameY = hdrH + Math.round(bodyH * 0.06)
+  ctx.fillText((product.product_name || '').substring(0, 28), W / 2, nameY)
+
+  // Separator line
+  ctx.strokeStyle = '#cccccc'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(pad * 2, nameY + nameSize + 2)
+  ctx.lineTo(W - pad * 2, nameY + nameSize + 2)
+  ctx.stroke()
+
+  // Barcode SVG → Image → Canvas
+  const bc = (product.barcode || product.item_id || '').toString()
+  const barH = Math.round(bodyH * 0.50)
+  const barY = nameY + nameSize + Math.round(bodyH * 0.04)
+
   try {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-    JsBarcode(svg, code, {
+    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    JsBarcode(svgEl, bc, {
       format: 'CODE128',
       displayValue: false,
       margin: 0,
-      width: 1.5,
-      height: 40,
+      width: 2,
+      height: barH,
     })
-    return svg.outerHTML
-  } catch {
-    return ''
-  }
+    const svgBlob = new Blob([svgEl.outerHTML], { type: 'image/svg+xml' })
+    const svgUrl = URL.createObjectURL(svgBlob)
+    await new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const barW = Math.min(W - pad * 4, img.naturalWidth || (W - pad * 4))
+        ctx.drawImage(img, (W - barW) / 2, barY, barW, barH)
+        URL.revokeObjectURL(svgUrl)
+        resolve()
+      }
+      img.onerror = resolve
+      img.src = svgUrl
+    })
+  } catch { /* skip barcode on error */ }
+
+  // Barcode text
+  ctx.fillStyle = '#555555'
+  const bcTextSize = Math.round(bodyH * 0.14)
+  ctx.font = `${bcTextSize}px Arial`
+  ctx.textBaseline = 'top'
+  ctx.fillText(bc, W / 2, barY + barH + 2)
+
+  // Gray footer
+  ctx.fillStyle = '#f0f0f0'
+  ctx.fillRect(0, H - ftrH, W, ftrH)
+  ctx.fillStyle = '#1A237E'
+  ctx.font = `bold ${Math.round(ftrH * 0.55)}px Arial`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`MRP: Rs. ${Math.round(product.mrp || 0).toLocaleString()}`, W / 2, H - ftrH / 2)
+
+  // Border
+  ctx.strokeStyle = '#1A237E'
+  ctx.lineWidth = 2
+  ctx.strokeRect(1, 1, W - 2, H - 2)
+
+  return canvas.toDataURL('image/png')
 }
 
-function printLabels(products, copies, labelSize, storeName) {
+async function printLabels(products, copies, labelSize, storeName) {
   const [wStr, hStr] = labelSize.split('x')
-  const W = parseInt(wStr), H = parseInt(hStr)
+  const W_mm = parseInt(wStr)
+  const H_mm = parseInt(hStr)
 
-  const labels = []
+  const pngList = []
   for (const p of products) {
-    const bc = p.barcode || p.item_id
-    const svgHtml = makeBarcodesvg(bc)
-    for (let i = 0; i < copies; i++) {
-      labels.push(`
-        <div class="label">
-          <div class="header">${(storeName || 'STORE').substring(0, 28)}</div>
-          <div class="name">${(p.product_name || '').substring(0, 30)}</div>
-          <div class="barcode">${svgHtml}</div>
-          <div class="bc-text">${bc}</div>
-          <div class="footer">MRP: Rs. ${Math.round(p.mrp || 0).toLocaleString()}</div>
-        </div>
-      `)
-    }
+    const dataUrl = await drawLabel(p, W_mm, H_mm, storeName)
+    for (let i = 0; i < copies; i++) pngList.push(dataUrl)
   }
+
+  const imgTags = pngList.map(src =>
+    `<img src="${src}" style="width:${W_mm}mm;height:${H_mm}mm;display:block;page-break-after:always;" />`
+  ).join('')
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  @page {
-    size: ${W}mm ${H}mm;
-    margin: 0;
-  }
-  body { background: #fff; }
-  .label {
-    width: ${W}mm;
-    height: ${H}mm;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1mm 1.5mm;
-    border: 0.3mm solid #1A237E;
-    page-break-after: always;
-    overflow: hidden;
-    font-family: Arial, sans-serif;
-  }
-  .header {
-    background: #1A237E;
-    color: #fff;
-    width: 100%;
-    text-align: center;
-    font-size: ${Math.max(5, H * 0.18)}pt;
-    font-weight: bold;
-    padding: 0.5mm 0;
-    border-radius: 0.5mm;
-    letter-spacing: 0.3px;
-  }
-  .name {
-    font-size: ${Math.max(4.5, H * 0.15)}pt;
-    font-weight: bold;
-    text-align: center;
-    color: #111;
-    width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .barcode {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-  }
-  .barcode svg {
-    width: ${W - 4}mm;
-    height: ${H * 0.40}mm;
-  }
-  .bc-text {
-    font-size: ${Math.max(4, H * 0.12)}pt;
-    color: #555;
-    text-align: center;
-    letter-spacing: 0.5px;
-  }
-  .footer {
-    background: #f5f5f5;
-    width: 100%;
-    text-align: center;
-    font-size: ${Math.max(5.5, H * 0.18)}pt;
-    font-weight: bold;
-    color: #1A237E;
-    padding: 0.5mm 0;
-    border-radius: 0.5mm;
-  }
-  @media print {
-    .label { page-break-after: always; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  @page { size:${W_mm}mm ${H_mm}mm; margin:0; }
+  body { background:#fff; }
+  img { width:${W_mm}mm; height:${H_mm}mm; display:block; page-break-after:always; }
+  @media screen {
+    body { padding:10px; background:#eee; }
+    img { box-shadow:0 2px 8px #aaa; margin-bottom:8px; }
   }
 </style>
 </head>
-<body>
-${labels.join('')}
-</body>
+<body>${imgTags}</body>
 </html>`
 
-  const win = window.open('', '_blank', 'width=400,height=300')
+  const win = window.open('', '_blank', 'width=600,height=500')
   win.document.write(html)
   win.document.close()
   win.focus()
-  setTimeout(() => { win.print() }, 400)
+  setTimeout(() => win.print(), 600)
 }
 
 export default function BarcodeLabels() {
@@ -146,12 +165,15 @@ export default function BarcodeLabels() {
   const [copies, setCopies]       = useState(2)
   const [labelSize, setLabelSize] = useState('50x25')
   const [loading, setLoading]     = useState(false)
+  const [printing, setPrinting]   = useState(false)
+  const [storeName, setStoreName] = useState('')
   const { storeName: authStoreName } = useAuthStore()
-  const [storeName, setStoreName] = useState(authStoreName || '')
 
   useEffect(() => {
-    if (!storeName) getStoreProfile().then(p => setStoreName(p?.store_name || '')).catch(() => {})
-  }, [])
+    const name = authStoreName || ''
+    setStoreName(name)
+    if (!name) getStoreProfile().then(p => setStoreName(p?.store_name || '')).catch(() => {})
+  }, [authStoreName])
 
   async function load() {
     setLoading(true)
@@ -164,19 +186,26 @@ export default function BarcodeLabels() {
 
   useEffect(() => { load() }, [category])
 
-  function handlePrint() {
-    const selectedProducts = products.filter(p => selected.includes(p.item_id))
-    if (!selectedProducts.length) { message.warning('Select at least one product'); return }
-    printLabels(selectedProducts, copies, labelSize, storeName)
+  async function handlePrint() {
+    const sel = products.filter(p => selected.includes(p.item_id))
+    if (!sel.length) return
+    setPrinting(true)
+    try {
+      await printLabels(sel, copies, labelSize, storeName)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setPrinting(false)
+    }
   }
 
   const columns = [
     { title: 'Item ID', dataIndex: 'item_id', key: 'item_id', width: 90 },
     { title: 'Product', dataIndex: 'product_name', key: 'product_name', ellipsis: true },
     { title: 'Category', dataIndex: 'category', key: 'category', width: 110 },
-    { title: 'MRP', dataIndex: 'mrp', key: 'mrp', width: 80, render: (v) => `₹${v}` },
+    { title: 'MRP', dataIndex: 'mrp', key: 'mrp', width: 80, render: v => `₹${v}` },
     { title: 'Barcode', dataIndex: 'barcode', key: 'barcode',
-      render: (v) => <Text code style={{ fontSize: 11 }}>{v}</Text> },
+      render: v => <Text code style={{ fontSize: 11 }}>{v}</Text> },
     { title: 'Stock', dataIndex: 'stock_qty', key: 'stock_qty', width: 70 },
   ]
 
@@ -187,12 +216,10 @@ export default function BarcodeLabels() {
       <Card style={{ borderRadius: 12, marginBottom: 16 }}>
         <Space wrap>
           <Select value={category} onChange={setCategory} style={{ width: 160 }}>
-            {CATEGORIES.map((c) => <Select.Option key={c} value={c}>{c}</Select.Option>)}
+            {CATEGORIES.map(c => <Select.Option key={c} value={c}>{c}</Select.Option>)}
           </Select>
           <Select value={labelSize} onChange={setLabelSize} style={{ width: 200 }}>
-            {LABEL_SIZES.map((s) => (
-              <Select.Option key={s.value} value={s.value}>{s.label}</Select.Option>
-            ))}
+            {LABEL_SIZES.map(s => <Select.Option key={s.value} value={s.value}>{s.label}</Select.Option>)}
           </Select>
           <Space>
             <Text>Copies:</Text>
@@ -200,7 +227,7 @@ export default function BarcodeLabels() {
           </Space>
           <Button
             type="primary" icon={<PrinterOutlined />}
-            disabled={!selected.length}
+            disabled={!selected.length} loading={printing}
             onClick={handlePrint}
           >
             Print Labels ({selected.length} selected)
@@ -208,10 +235,8 @@ export default function BarcodeLabels() {
         </Space>
       </Card>
 
-      <Alert
-        type="info" showIcon style={{ marginBottom: 12 }}
-        message="Select products, choose label size and copies, then click Print Labels. A print dialog will open — select your Zenpert printer and click Print."
-      />
+      <Alert type="info" showIcon style={{ marginBottom: 12 }}
+        message='Select products → click Print Labels → in the print dialog: choose your Zenpert printer, set paper size to your label size, set Scale to "Actual size", then Print.' />
 
       <Card style={{ borderRadius: 12 }}>
         <Text type="secondary" style={{ marginBottom: 12, display: 'block' }}>
@@ -220,10 +245,7 @@ export default function BarcodeLabels() {
         <Table
           dataSource={products} columns={columns} rowKey="item_id"
           loading={loading} size="middle" pagination={{ pageSize: 30 }}
-          rowSelection={{
-            selectedRowKeys: selected,
-            onChange: (keys) => setSelected(keys),
-          }}
+          rowSelection={{ selectedRowKeys: selected, onChange: keys => setSelected(keys) }}
           scroll={{ x: 700 }}
         />
       </Card>
