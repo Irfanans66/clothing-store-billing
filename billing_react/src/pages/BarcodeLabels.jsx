@@ -114,12 +114,13 @@ async function drawLabel(product, W_mm, H_mm, storeName) {
     })
   } catch { /* skip barcode on error */ }
 
-  // Barcode text
+  // Barcode text + Item ID
   ctx.fillStyle = '#555555'
   const bcTextSize = Math.round(bodyH * 0.14)
   ctx.font = `${bcTextSize}px Arial`
   ctx.textBaseline = 'top'
-  ctx.fillText(bc, W / 2, barY + barH + 2)
+  const bcLine = product.item_id ? `${bc}  |  ${product.item_id}` : bc
+  ctx.fillText(bcLine, W / 2, barY + barH + 2)
 
   // Gray footer
   ctx.fillStyle = '#f0f0f0'
