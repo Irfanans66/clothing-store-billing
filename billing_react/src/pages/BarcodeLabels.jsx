@@ -27,10 +27,16 @@ function mmToPx(mm) {
 async function drawLabel(product, W_mm, H_mm, storeName) {
   const W = mmToPx(W_mm)
   const H = mmToPx(H_mm)
+  // For landscape labels (W > H), rotate canvas to portrait so printer won't auto-rotate
+  const isLandscape = W > H
   const canvas = document.createElement('canvas')
-  canvas.width = W
-  canvas.height = H
+  canvas.width  = isLandscape ? H : W
+  canvas.height = isLandscape ? W : H
   const ctx = canvas.getContext('2d')
+  if (isLandscape) {
+    ctx.translate(0, W)
+    ctx.rotate(-Math.PI / 2)
+  }
 
   const hdrH = Math.round(H * 0.22)
   const ftrH = Math.round(H * 0.22)
@@ -123,6 +129,12 @@ async function printLabels(products, copies, labelSize, storeName) {
   const [wStr, hStr] = labelSize.split('x')
   const W_mm = parseInt(wStr)
   const H_mm = parseInt(hStr)
+  // For landscape labels, the canvas is stored as portrait (H_mm × W_mm)
+  const isLandscape = W_mm > H_mm
+  const pageW = isLandscape ? H_mm : W_mm
+  const pageH = isLandscape ? W_mm : H_mm
+  const imgW  = isLandscape ? H_mm : W_mm
+  const imgH  = isLandscape ? W_mm : H_mm
 
   const pngList = []
   for (const p of products) {
@@ -131,7 +143,7 @@ async function printLabels(products, copies, labelSize, storeName) {
   }
 
   const imgTags = pngList.map(src =>
-    `<img src="${src}" style="width:${W_mm}mm;height:${H_mm}mm;display:block;page-break-after:always;" />`
+    `<img src="${src}" style="width:${imgW}mm;height:${imgH}mm;display:block;page-break-after:always;" />`
   ).join('')
 
   const html = `<!DOCTYPE html>
@@ -140,9 +152,9 @@ async function printLabels(products, copies, labelSize, storeName) {
 <meta charset="utf-8">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  @page { size:${W_mm}mm ${H_mm}mm; margin:0; }
+  @page { size:${pageW}mm ${pageH}mm; margin:0; }
   body { background:#fff; }
-  img { width:${W_mm}mm; height:${H_mm}mm; display:block; page-break-after:always; }
+  img { width:${imgW}mm; height:${imgH}mm; display:block; page-break-after:always; }
   @media screen {
     body { padding:10px; background:#eee; }
     img { box-shadow:0 2px 8px #aaa; margin-bottom:8px; }
