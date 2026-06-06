@@ -62,9 +62,10 @@ async function drawLabel(product, W_mm, H_mm, storeName) {
   ctx.font = `bold ${nameSize}px Arial`
   ctx.textBaseline = 'top'
   const nameY = hdrH + Math.round(bodyH * 0.06)
-  const nameText = (product.product_name || '').substring(0, 24)
-  const sizeText = product.size ? ` (${product.size})` : ''
-  ctx.fillText((nameText + sizeText).substring(0, 30), W / 2, nameY)
+  const nameText = (product.product_name || '').substring(0, 22)
+  const sizeColor = [product.size, product.color].filter(Boolean).join(' / ')
+  const sizeText = sizeColor ? ` (${sizeColor})` : ''
+  ctx.fillText((nameText + sizeText).substring(0, 32), W / 2, nameY)
 
   // Separator line
   ctx.strokeStyle = '#cccccc'
