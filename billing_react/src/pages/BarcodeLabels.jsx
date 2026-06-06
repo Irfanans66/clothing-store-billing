@@ -9,6 +9,7 @@ const { Title, Text } = Typography
 const CATEGORIES = ['All','Shirts','T-Shirts','Jeans','Trousers','Kurtis','Sarees','Lehenga','Jackets','Sweaters','Suits','Kids Wear','Accessories','Other']
 const LABEL_SIZES = [
   { value: '50x25', label: '50×25 mm (Standard)' },
+  { value: '25x50', label: '25×50 mm (Portrait)' },
   { value: '40x30', label: '40×30 mm (Medium)' },
   { value: '38x25', label: '38×25 mm (Small)' },
   { value: '60x40', label: '60×40 mm (Large)' },
