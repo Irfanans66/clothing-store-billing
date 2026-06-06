@@ -9,6 +9,7 @@ const { Title, Text } = Typography
 const CATEGORIES = ['All','Shirts','T-Shirts','Jeans','Trousers','Kurtis','Sarees','Lehenga','Jackets','Sweaters','Suits','Kids Wear','Accessories','Other']
 const LABEL_SIZES = [
   { value: '50x25', label: '50×25 mm (Standard)' },
+  { value: '50.8x24.9', label: '50.8×24.9 mm' },
   { value: '25x50', label: '25×50 mm (Portrait)' },
   { value: '40x30', label: '40×30 mm (Medium)' },
   { value: '38x25', label: '38×25 mm (Small)' },
@@ -141,8 +142,8 @@ async function drawLabel(product, W_mm, H_mm, storeName) {
 
 async function printLabels(products, copies, labelSize, storeName) {
   const [wStr, hStr] = labelSize.split('x')
-  const W_mm = parseInt(wStr)
-  const H_mm = parseInt(hStr)
+  const W_mm = parseFloat(wStr)
+  const H_mm = parseFloat(hStr)
   // For landscape labels, the canvas is stored as portrait (H_mm × W_mm)
   const isLandscape = W_mm > H_mm
   const pageW = isLandscape ? H_mm : W_mm
