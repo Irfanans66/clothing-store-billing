@@ -67,18 +67,28 @@ async function drawLabel(product, W_mm, H_mm, storeName) {
   const sizeText = sizeColor ? ` (${sizeColor})` : ''
   ctx.fillText((nameText + sizeText).substring(0, 32), W / 2, nameY)
 
+  // Category
+  if (product.category) {
+    ctx.fillStyle = '#555555'
+    ctx.font = `${Math.round(bodyH * 0.16)}px Arial`
+    ctx.fillText(product.category, W / 2, nameY + nameSize + Math.round(bodyH * 0.01))
+  }
+
+  const catH = product.category ? Math.round(bodyH * 0.18) : 0
+
   // Separator line
   ctx.strokeStyle = '#cccccc'
   ctx.lineWidth = 1
+  const sepY = nameY + nameSize + catH + Math.round(bodyH * 0.02)
   ctx.beginPath()
-  ctx.moveTo(pad * 2, nameY + nameSize + 2)
-  ctx.lineTo(W - pad * 2, nameY + nameSize + 2)
+  ctx.moveTo(pad * 2, sepY)
+  ctx.lineTo(W - pad * 2, sepY)
   ctx.stroke()
 
   // Barcode SVG → Image → Canvas
   const bc = (product.barcode || product.item_id || '').toString()
-  const barH = Math.round(bodyH * 0.50)
-  const barY = nameY + nameSize + Math.round(bodyH * 0.04)
+  const barH = Math.round(bodyH * 0.44)
+  const barY = sepY + Math.round(bodyH * 0.03)
 
   try {
     const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
