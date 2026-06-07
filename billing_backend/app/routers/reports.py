@@ -86,19 +86,71 @@ def sales_by_payment_mode(
 
 @router.get("/daily-sales")
 def daily_sales(
-    days: int = Query(30, description="Number of past days to include"),
+    period: str = Query("month", description="today | week | month | year"),
     identity: dict = Depends(require_store_access),
     db: Session = Depends(get_db),
 ):
+    import datetime
     sc = identity["store_code"]
-    rows = (
-        db.query(Bill.bill_date, func.sum(Bill.grand_total).label("revenue"))
-        .filter(Bill.store_code == sc, Bill.status == "Paid")
-        .group_by(Bill.bill_date)
-        .order_by(Bill.bill_date)
-        .all()
-    )
-    return [{"date": r.bill_date, "revenue": round(float(r.revenue), 2)} for r in rows]
+    today = datetime.date.today()
+
+    if period == "today":
+        rows = (
+            db.query(Bill.bill_date,
+                     func.sum(Bill.grand_total).label("revenue"),
+                     func.count(Bill.id).label("bills"))
+            .filter(Bill.store_code == sc, Bill.status.in_(["Paid", "Credit"]),
+                    Bill.bill_date == str(today))
+            .group_by(Bill.bill_date)
+            .all()
+        )
+        return [{"date": r.bill_date, "revenue": round(float(r.revenue), 2),
+                 "bills": int(r.bills)} for r in rows]
+
+    elif period == "week":
+        start = str(today - datetime.timedelta(days=6))
+        rows = (
+            db.query(Bill.bill_date,
+                     func.sum(Bill.grand_total).label("revenue"),
+                     func.count(Bill.id).label("bills"))
+            .filter(Bill.store_code == sc, Bill.status.in_(["Paid", "Credit"]),
+                    Bill.bill_date >= start)
+            .group_by(Bill.bill_date)
+            .order_by(Bill.bill_date)
+            .all()
+        )
+        return [{"date": r.bill_date, "revenue": round(float(r.revenue), 2),
+                 "bills": int(r.bills)} for r in rows]
+
+    elif period == "year":
+        start = str(today - datetime.timedelta(days=364))
+        rows = (
+            db.query(func.substr(Bill.bill_date, 1, 7).label("month"),
+                     func.sum(Bill.grand_total).label("revenue"),
+                     func.count(Bill.id).label("bills"))
+            .filter(Bill.store_code == sc, Bill.status.in_(["Paid", "Credit"]),
+                    Bill.bill_date >= start)
+            .group_by(func.substr(Bill.bill_date, 1, 7))
+            .order_by(func.substr(Bill.bill_date, 1, 7))
+            .all()
+        )
+        return [{"date": r.month, "revenue": round(float(r.revenue), 2),
+                 "bills": int(r.bills)} for r in rows]
+
+    else:  # month (default)
+        start = str(today - datetime.timedelta(days=29))
+        rows = (
+            db.query(Bill.bill_date,
+                     func.sum(Bill.grand_total).label("revenue"),
+                     func.count(Bill.id).label("bills"))
+            .filter(Bill.store_code == sc, Bill.status.in_(["Paid", "Credit"]),
+                    Bill.bill_date >= start)
+            .group_by(Bill.bill_date)
+            .order_by(Bill.bill_date)
+            .all()
+        )
+        return [{"date": r.bill_date, "revenue": round(float(r.revenue), 2),
+                 "bills": int(r.bills)} for r in rows]
 
 
 # ── GET /reports/top-products ─────────────────────────────────────────────────
