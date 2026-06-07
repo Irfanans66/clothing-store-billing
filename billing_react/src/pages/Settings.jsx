@@ -132,20 +132,23 @@ export default function Settings() {
                     onChange={(e) => {
                       setPaperSize(e.target.value)
                       localStorage.setItem('receipt_paper_size', e.target.value)
-                      message.success(`Receipt size set to ${e.target.value === '2inch' ? '2-inch (58mm)' : '3-inch (80mm)'}`)
+                      message.success('Receipt size updated!')
                     }}
                   >
-                    <Radio.Button value="3inch" style={{ marginRight: 12 }}>
-                      3-inch (80mm) — Standard
+                    <Radio.Button value="2inch" style={{ marginRight: 8 }}>
+                      2-inch (58mm)
                     </Radio.Button>
-                    <Radio.Button value="2inch">
-                      2-inch (58mm) — Small
+                    <Radio.Button value="3inch" style={{ marginRight: 8 }}>
+                      3-inch Standard
+                    </Radio.Button>
+                    <Radio.Button value="3inch-bold">
+                      3-inch Bold
                     </Radio.Button>
                   </Radio.Group>
                   <div style={{ marginTop: 16, color: '#888', fontSize: 12 }}>
-                    {paperSize === '2inch'
-                      ? 'Using 2-inch (58mm) paper — compact receipts, no UPI QR code.'
-                      : 'Using 3-inch (80mm) paper — full receipts with UPI QR code support.'}
+                    {paperSize === '2inch' && 'Using 2-inch (58mm) paper — compact receipt with UPI QR.'}
+                    {paperSize === '3inch' && 'Using 3-inch (80mm) standard receipt.'}
+                    {paperSize === '3inch-bold' && 'Using 3-inch (80mm) bold receipt — large fonts, thick lines, easy to read.'}
                   </div>
                 </div>
               ),

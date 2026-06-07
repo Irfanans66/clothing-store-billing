@@ -86,21 +86,28 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
         raise HTTPException(status_code=500, detail="reportlab not installed.")
 
     is_2inch = paper_size == "2inch"
+    is_bold  = paper_size == "3inch-bold"
     upi_id    = (store.upi_id or "").strip() if store else ""
     has_qr    = bool(upi_id)
-    qr_size_mm = 22 if is_2inch else 30
+    qr_size_mm = 22 if is_2inch else 32
 
-    W   = (58 if is_2inch else 80) * mm
+    W = (58 if is_2inch else 80) * mm
     buf = io.BytesIO()
-    H   = (90 + len(raw_items) * 17 + 65 + (qr_size_mm + 20 if has_qr else 0)) * mm if is_2inch \
-          else (90 + len(raw_items) * 17 + 68 + (qr_size_mm + 24 if has_qr else 0)) * mm
-    c   = rl_canvas.Canvas(buf, pagesize=(W, H))
-    y   = H - 5 * mm
 
-    # font/layout constants differ by paper size
-    _ctr_sz  = 9  if is_2inch else 10
-    _lft_sz  = 9  if is_2inch else 9
-    _rw_sz   = 9  if is_2inch else 9
+    if is_2inch:
+        H = (90 + len(raw_items) * 17 + 65 + (qr_size_mm + 20 if has_qr else 0)) * mm
+    elif is_bold:
+        H = (110 + len(raw_items) * 22 + 80 + (qr_size_mm + 28 if has_qr else 0)) * mm
+    else:
+        H = (90 + len(raw_items) * 17 + 68 + (qr_size_mm + 24 if has_qr else 0)) * mm
+
+    c   = rl_canvas.Canvas(buf, pagesize=(W, H))
+    y   = H - 6 * mm
+
+    # font/layout constants
+    _ctr_sz  = 9  if is_2inch else (12 if is_bold else 10)
+    _lft_sz  = 9  if is_2inch else (11 if is_bold else 9)
+    _rw_sz   = 9  if is_2inch else (11 if is_bold else 9)
     _dash_ch = 32 if is_2inch else 44
     _lft_max = 36 if is_2inch else 50
     _rw_max  = 22 if is_2inch else 32
@@ -111,14 +118,14 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
         sz = sz or _ctr_sz
         c.setFont(font, sz)
         c.drawCentredString(W / 2, y, str(txt))
-        y -= (sz + 3) * 0.8 * mm
+        y -= (sz + 3) * 0.85 * mm
 
     def lft(txt, font="Courier", sz=None):
         nonlocal y
         sz = sz or _lft_sz
         c.setFont(font, sz)
         c.drawString(_pad, y, str(txt)[:_lft_max])
-        y -= (sz + 2) * 0.75 * mm
+        y -= (sz + 2) * 0.8 * mm
 
     def rw(lt, rt, bold=False, sz=None):
         nonlocal y
@@ -126,53 +133,99 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
         c.setFont("Courier-Bold" if bold else "Courier", sz)
         c.drawString(_pad, y, str(lt)[:_rw_max])
         c.drawRightString(W - _pad, y, str(rt))
-        y -= (sz + 2) * 0.75 * mm
+        y -= (sz + 2) * 0.8 * mm
 
     def dash():
         nonlocal y
-        _dsz = 8 if is_2inch else 7
+        _dsz = 8 if is_2inch else (9 if is_bold else 7)
         c.setFont("Courier", _dsz)
         c.drawCentredString(W / 2, y, "-" * _dash_ch)
-        y -= (3.2 if not is_2inch else 3.8) * mm
+        y -= (4.2 if is_bold else (3.8 if is_2inch else 3.2)) * mm
 
-    ctr(store.store_name if store else "STORE", sz=13)
-    if store:
-        ctr(store.address or "", "Courier", 8)
-        ctr(f"Ph: {store.phone or ''}  GSTIN: {store.gstin or ''}", "Courier", 8)
-    dash()
-    lft(f"Bill #  : {bill.bill_no}")
-    lft(f"Date    : {bill.bill_date}  {bill.bill_time}")
-    lft(f"Cust    : {bill.customer_name or 'Walk-in'}")
-    lft(f"Phone   : {bill.phone or '-'}")
-    dash()
-    rw("ITEM", "AMT", bold=True)
-    dash()
+    def thick_line():
+        nonlocal y
+        c.setStrokeColorRGB(0, 0, 0)
+        c.setLineWidth(1.2)
+        c.line(_pad, y, W - _pad, y)
+        y -= 4 * mm
+        c.setLineWidth(0.5)
 
+    # ── Header ────────────────────────────────────────────────────────────────
+    store_name = store.store_name if store else "STORE"
+    if is_bold:
+        ctr(store_name, sz=18)
+        if store:
+            ctr(store.address or "", "Courier", 9)
+            ctr(f"Ph: {store.phone or ''}   GST: {store.gstin or ''}", "Courier", 9)
+        thick_line()
+        lft(f"Bill No : {bill.bill_no}", "Courier-Bold", 11)
+        lft(f"Date    : {bill.bill_date}  {bill.bill_time}", sz=10)
+        lft(f"Customer: {bill.customer_name or 'Walk-in'}", "Courier-Bold", 11)
+        if bill.phone:
+            lft(f"Phone   : {bill.phone}", sz=10)
+        thick_line()
+        rw("ITEM", "AMOUNT", bold=True, sz=12)
+        thick_line()
+    else:
+        ctr(store_name, sz=13)
+        if store:
+            ctr(store.address or "", "Courier", 8)
+            ctr(f"Ph: {store.phone or ''}  GSTIN: {store.gstin or ''}", "Courier", 8)
+        dash()
+        lft(f"Bill #  : {bill.bill_no}")
+        lft(f"Date    : {bill.bill_date}  {bill.bill_time}")
+        lft(f"Cust    : {bill.customer_name or 'Walk-in'}")
+        lft(f"Phone   : {bill.phone or '-'}")
+        dash()
+        rw("ITEM", "AMT", bold=True)
+        dash()
+
+    # ── Items ─────────────────────────────────────────────────────────────────
     for r in raw_items:
-        # Columns: id, bill_id, store_code, item_id, product_name, category, size, color,
-        #          qty, mrp, selling_price, discount_pct, subtotal, gst_pct, gst_amt, total
-        _item_sz = 8 if is_2inch else 8
+        _item_sz = 9 if is_2inch else (11 if is_bold else 8)
+        _price_sz = 9 if is_2inch else (10 if is_bold else 8)
         lft(f"{str(r[4] or '')[:24]} ({r[6] or ''})", sz=_item_sz)
-        rw(f"  {r[8]}x Rs.{r[10]:.2f} [GST {r[13]}%]", f"Rs.{r[12]:.2f}", sz=_item_sz)
+        rw(f"  {r[8]}x Rs.{r[10]:.2f} [GST {r[13]}%]", f"Rs.{r[12]:.2f}", sz=_price_sz)
 
-    dash()
-    rw("Subtotal", f"Rs.{bill.subtotal:.2f}")
-    if bill.discount > 0:
-        rw(f"Discount ({bill.discount_type})", f"-Rs.{bill.discount:.2f}")
-    rw("GST", f"Rs.{bill.gst_total:.2f}")
-    rw("TOTAL", f"Rs.{int(bill.grand_total)}", bold=True, sz=12)
-    dash()
-    lft(f"Payment : {bill.payment_mode}")
-    rw("Paid", f"Rs.{bill.amount_paid:.0f}")
-    if bill.change_amt > 0:
-        rw("Change", f"Rs.{bill.change_amt:.0f}")
-    elif bill.change_amt < 0:
-        rw("Balance Due", f"Rs.{abs(bill.change_amt):.0f}", bold=True)
-    if bill.notes:
-        lft(f"Note: {bill.notes}", sz=7)
-    dash()
-    ctr("* Thank You! Visit Again *", "Courier-Bold", 8)
-    ctr("Exchange within 7 days with receipt", "Courier", 6)
+    # ── Totals ────────────────────────────────────────────────────────────────
+    if is_bold:
+        thick_line()
+        rw("Subtotal", f"Rs.{bill.subtotal:.2f}", sz=11)
+        if bill.discount > 0:
+            rw(f"Discount ({bill.discount_type})", f"-Rs.{bill.discount:.2f}", sz=11)
+        rw("GST", f"Rs.{bill.gst_total:.2f}", sz=11)
+        thick_line()
+        rw("TOTAL", f"Rs.{int(bill.grand_total)}", bold=True, sz=16)
+        thick_line()
+        rw(f"Payment : {bill.payment_mode}", f"Paid: Rs.{bill.amount_paid:.0f}", sz=11)
+        if bill.change_amt > 0:
+            rw("Change", f"Rs.{bill.change_amt:.0f}", sz=11)
+        elif bill.change_amt < 0:
+            rw("BALANCE DUE", f"Rs.{abs(bill.change_amt):.0f}", bold=True, sz=12)
+        if bill.notes:
+            lft(f"Note: {bill.notes}", sz=9)
+        thick_line()
+        ctr("** THANK YOU! VISIT AGAIN **", "Courier-Bold", 11)
+        ctr("Exchange within 7 days with receipt", "Courier", 8)
+    else:
+        dash()
+        rw("Subtotal", f"Rs.{bill.subtotal:.2f}")
+        if bill.discount > 0:
+            rw(f"Discount ({bill.discount_type})", f"-Rs.{bill.discount:.2f}")
+        rw("GST", f"Rs.{bill.gst_total:.2f}")
+        rw("TOTAL", f"Rs.{int(bill.grand_total)}", bold=True, sz=12)
+        dash()
+        lft(f"Payment : {bill.payment_mode}")
+        rw("Paid", f"Rs.{bill.amount_paid:.0f}")
+        if bill.change_amt > 0:
+            rw("Change", f"Rs.{bill.change_amt:.0f}")
+        elif bill.change_amt < 0:
+            rw("Balance Due", f"Rs.{abs(bill.change_amt):.0f}", bold=True)
+        if bill.notes:
+            lft(f"Note: {bill.notes}", sz=7)
+        dash()
+        ctr("* Thank You! Visit Again *", "Courier-Bold", 8)
+        ctr("Exchange within 7 days with receipt", "Courier", 6)
 
     if has_qr:
         try:
