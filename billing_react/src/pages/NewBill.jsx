@@ -332,14 +332,15 @@ export default function NewBill() {
   const mobileCartCols = [
     {
       title: 'Item', key: 'item', render: (_, rec) => (
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 13 }}>
+        <div style={{ padding: '4px 0' }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>
             {rec.product_name}
             {rec.item_id?.startsWith('CUSTOM') && <Tag color="orange" style={{ marginLeft: 4, fontSize: 10 }}>Custom</Tag>}
           </div>
-          <div style={{ fontSize: 12, color: '#666' }}>{rec.size} | ₹{rec.selling_price} ×{rec.qty}</div>
-          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <InputNumber min={1} value={rec.qty} size="small" style={{ width: 60 }}
+          <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>{rec.size} · ₹{rec.selling_price} each</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <InputNumber min={1} value={rec.qty}
+              style={{ width: 70 }} size="middle"
               onChange={(nv) => setCart((prev) => prev.map((it) =>
                 it._key === rec._key
                   ? { ...it, qty: nv, subtotal: Math.round(it.selling_price * nv),
@@ -347,8 +348,8 @@ export default function NewBill() {
                       item_total: Math.round(Math.round(it.selling_price * nv) * (1 + it.gst_pct / 100)) }
                   : it
               ))} />
-            <InputNumber min={0} max={100} value={rec.item_disc_pct} size="small"
-              style={{ width: 70 }} suffix="% off"
+            <InputNumber min={0} max={100} value={rec.item_disc_pct}
+              style={{ width: 80 }} suffix="% off" size="middle"
               onChange={(nv) => setCart((prev) =>
                 prev.map((it) => it._key === rec._key ? applyItemDisc(it, nv) : it)
               )} />
@@ -357,12 +358,12 @@ export default function NewBill() {
       ),
     },
     {
-      title: 'Amt', key: 'amt', width: 70,
+      title: 'Amt', key: 'amt', width: 80,
       render: (_, rec) => (
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontWeight: 700 }}>₹{Math.round(rec.subtotal)}</div>
-          <Button type="text" danger size="small" icon={<DeleteOutlined />}
-            onClick={() => setCart((p) => p.filter((i) => i._key !== rec._key))} />
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#1A237E' }}>₹{Math.round(rec.subtotal)}</div>
+          <Button type="text" danger icon={<DeleteOutlined />} style={{ marginTop: 4, padding: '4px 8px' }}
+            onClick={() => setCart((p) => p.filter((i) => i._key !== rec._key))}>Del</Button>
         </div>
       ),
     },
@@ -543,7 +544,7 @@ export default function NewBill() {
   const contentPad = isMobile ? '0 8px' : '0'
 
   return (
-    <div style={{ padding: contentPad }}>
+    <div style={{ padding: contentPad, paddingBottom: isMobile && cart.length > 0 ? 80 : contentPad }}>
       <Title level={isMobile ? 4 : 3} style={{ marginBottom: 12 }}>🛒 New Bill</Title>
 
       <Row gutter={[12, 12]}>
@@ -668,25 +669,31 @@ export default function NewBill() {
             </div>
 
             {searchHits.length > 0 && (
-              <div style={{ marginTop: 12, border: '1px solid #f0f0f0', borderRadius: 8, overflow: 'hidden' }}>
-                <div style={{ padding: '6px 12px', background: '#fafafa', fontWeight: 600, fontSize: 13 }}>
-                  {searchHits.length} matches — tap to add:
+              <div style={{ marginTop: 12, border: '1px solid #e0e0e0', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '8px 14px', background: '#f0f4ff', fontWeight: 600, fontSize: 13, borderBottom: '1px solid #e0e0e0' }}>
+                  {searchHits.length} match{searchHits.length > 1 ? 'es' : ''} — tap to add
                 </div>
-                {searchHits.slice(0,10).map((p) => (
+                {searchHits.slice(0, 10).map((p) => (
                   <div
                     key={p.item_id}
                     onClick={() => pushToCart(p)}
                     style={{
-                      padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f5f5f5',
+                      padding: isMobile ? '14px 14px' : '10px 12px',
+                      cursor: 'pointer', borderBottom: '1px solid #f5f5f5',
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      background: '#fff', activeOpacity: 0.7,
                     }}
                   >
-                    <span>
+                    <div>
+                      <div>
+                        <Text strong style={{ fontSize: isMobile ? 15 : 13 }}>{p.product_name}</Text>
+                        {p.size && <Tag style={{ marginLeft: 6 }}>{p.size}</Tag>}
+                        {p.color && <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>{p.color}</Text>}
+                      </div>
                       <Text code style={{ fontSize: 11 }}>{p.item_id}</Text>
-                      <Text strong style={{ marginLeft: 8 }}>{p.product_name}</Text>
-                      <Text type="secondary" style={{ marginLeft: 6 }}>({p.size})</Text>
-                    </span>
-                    <Tag color="blue">₹{p.selling_price}</Tag>
+                      {p.stock_qty <= 2 && <Tag color="red" style={{ marginLeft: 6, fontSize: 10 }}>Low Stock</Tag>}
+                    </div>
+                    <Tag color="blue" style={{ fontSize: isMobile ? 14 : 12, padding: '2px 8px' }}>₹{p.selling_price}</Tag>
                   </div>
                 ))}
               </div>
@@ -1074,6 +1081,31 @@ export default function NewBill() {
           </Button>
         </Form>
       </Modal>
+
+      {/* ── Mobile sticky bottom bar ─────────────────────────────────────── */}
+      {isMobile && cart.length > 0 && !lastBill && (
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 999,
+          background: '#fff', borderTop: '2px solid #1A237E',
+          padding: '10px 16px',
+          boxShadow: '0 -4px 16px rgba(0,0,0,0.15)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#888' }}>{cart.length} item{cart.length > 1 ? 's' : ''} · Grand Total</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#1A237E', lineHeight: 1.2 }}>
+              ₹{grand.toLocaleString()}
+            </div>
+          </div>
+          <Button
+            type="primary" size="large" loading={billing}
+            onClick={handleGenerateBill} icon={<PrinterOutlined />}
+            style={{ height: 50, fontSize: 15, minWidth: 150, borderRadius: 10 }}
+          >
+            Generate Bill
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
