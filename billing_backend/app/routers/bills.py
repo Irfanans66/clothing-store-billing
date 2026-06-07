@@ -87,20 +87,20 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
 
     is_2inch = paper_size == "2inch"
     upi_id    = (store.upi_id or "").strip() if store else ""
-    has_qr    = bool(upi_id) and not is_2inch  # skip QR on 2-inch to save space
-    qr_size_mm = 28 if has_qr else 0
+    has_qr    = bool(upi_id)
+    qr_size_mm = 22 if is_2inch else 30
 
     W   = (58 if is_2inch else 80) * mm
     buf = io.BytesIO()
-    H   = (75 + len(raw_items) * 13 + 55 + (qr_size_mm + 18 if has_qr else 0)) * mm if is_2inch \
-          else (85 + len(raw_items) * 15 + 65 + (qr_size_mm + 22 if has_qr else 0)) * mm
+    H   = (85 + len(raw_items) * 15 + 60 + (qr_size_mm + 20 if has_qr else 0)) * mm if is_2inch \
+          else (90 + len(raw_items) * 16 + 68 + (qr_size_mm + 24 if has_qr else 0)) * mm
     c   = rl_canvas.Canvas(buf, pagesize=(W, H))
     y   = H - 5 * mm
 
     # font/layout constants differ by paper size
-    _ctr_sz  = 8  if is_2inch else 9
-    _lft_sz  = 7  if is_2inch else 8
-    _rw_sz   = 7  if is_2inch else 8
+    _ctr_sz  = 9  if is_2inch else 10
+    _lft_sz  = 8  if is_2inch else 9
+    _rw_sz   = 8  if is_2inch else 9
     _dash_ch = 32 if is_2inch else 44
     _lft_max = 36 if is_2inch else 50
     _rw_max  = 22 if is_2inch else 32
@@ -134,10 +134,10 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
         c.drawCentredString(W / 2, y, "-" * _dash_ch)
         y -= 3.2 * mm
 
-    ctr(store.store_name if store else "STORE", sz=11)
+    ctr(store.store_name if store else "STORE", sz=13)
     if store:
-        ctr(store.address or "", "Courier", 7)
-        ctr(f"Ph: {store.phone or ''}  GSTIN: {store.gstin or ''}", "Courier", 7)
+        ctr(store.address or "", "Courier", 8)
+        ctr(f"Ph: {store.phone or ''}  GSTIN: {store.gstin or ''}", "Courier", 8)
     dash()
     lft(f"Bill #  : {bill.bill_no}")
     lft(f"Date    : {bill.bill_date}  {bill.bill_time}")
@@ -158,7 +158,7 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
     if bill.discount > 0:
         rw(f"Discount ({bill.discount_type})", f"-Rs.{bill.discount:.2f}")
     rw("GST", f"Rs.{bill.gst_total:.2f}")
-    rw("TOTAL", f"Rs.{int(bill.grand_total)}", bold=True, sz=10)
+    rw("TOTAL", f"Rs.{int(bill.grand_total)}", bold=True, sz=12)
     dash()
     lft(f"Payment : {bill.payment_mode}")
     rw("Paid", f"Rs.{bill.amount_paid:.0f}")
