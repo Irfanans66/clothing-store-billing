@@ -1,24 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Card, Table, Input, Button, Space, Tag, Typography, Modal, Form, Row, Col, Select, message, Statistic } from 'antd'
-import { SearchOutlined, UserAddOutlined, EyeOutlined } from '@ant-design/icons'
-import { getCustomers, createCustomer, updateCustomer } from '../api/client'
+import { Card, Table, Input, Button, Space, Tag, Typography, Modal, Form, Row, Col,
+  Select, message, Statistic, InputNumber, Alert } from 'antd'
+import { SearchOutlined, UserAddOutlined, EyeOutlined, WhatsAppOutlined, DollarOutlined } from '@ant-design/icons'
+import { getCustomers, createCustomer, updateCustomer, recordCreditPayment } from '../api/client'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../store/authStore'
 
 const { Title, Text } = Typography
 const MEMBER_TYPES = ['Regular', 'Silver', 'Gold', 'Platinum']
 const MEMBER_COLORS = { Gold: 'gold', Platinum: 'purple', Silver: 'default', Regular: 'blue' }
+const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Net Banking']
 
 export default function Customers() {
-  const [customers, setCustomers] = useState([])
-  const [loading, setLoading]     = useState(false)
-  const [search, setSearch]       = useState('')
-  const [addModal, setAddModal]   = useState(false)
-  const [editModal, setEditModal] = useState(false)
-  const [editTarget, setEditTarget] = useState(null)
+  const [customers, setCustomers]     = useState([])
+  const [loading, setLoading]         = useState(false)
+  const [search, setSearch]           = useState('')
+  const [addModal, setAddModal]       = useState(false)
+  const [editModal, setEditModal]     = useState(false)
+  const [editTarget, setEditTarget]   = useState(null)
+  const [payModal, setPayModal]       = useState(false)
+  const [payTarget, setPayTarget]     = useState(null)
+  const [payAmount, setPayAmount]     = useState(0)
+  const [payMode, setPayMode]         = useState('Cash')
+  const [payLoading, setPayLoading]   = useState(false)
   const [addForm]  = Form.useForm()
   const [editForm] = Form.useForm()
   const debounceRef = useRef(null)
   const navigate = useNavigate()
+  const { storeName } = useAuthStore()
 
   async function load(q = '') {
     setLoading(true)
@@ -54,13 +63,46 @@ export default function Customers() {
     } catch (err) { message.error(err.message) }
   }
 
+  async function handleRecordPayment() {
+    if (!payAmount || payAmount <= 0) { message.error('Enter a valid amount'); return }
+    setPayLoading(true)
+    try {
+      await recordCreditPayment(payTarget.customer_id, payAmount, payMode)
+      message.success(`₹${payAmount} payment recorded for ${payTarget.name}`)
+      setPayModal(false); setPayTarget(null); setPayAmount(0)
+      load(search)
+    } catch (err) { message.error(err.message) }
+    finally { setPayLoading(false) }
+  }
+
+  function openPayModal(cust) {
+    setPayTarget(cust)
+    setPayAmount(Math.round(cust.credit_balance))
+    setPayMode('Cash')
+    setPayModal(true)
+  }
+
+  function sendWhatsAppReminder(cust) {
+    if (!cust.phone) { message.warning('No phone number for this customer'); return }
+    const phone = cust.phone.replace(/\D/g, '')
+    const due = Math.round(cust.credit_balance).toLocaleString()
+    const msg =
+      `Dear ${cust.name},\n\n` +
+      `This is a reminder from *${storeName || 'our store'}*.\n\n` +
+      `You have an outstanding balance of *₹${due}* on your account.\n\n` +
+      `Kindly visit us or make the payment at your earliest convenience.\n\n` +
+      `Thank you! 🙏`
+    const url = `https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`
+    window.open(url, '_blank')
+  }
+
   // summary stats
-  const totalCustomers  = customers.length
+  const totalCustomers   = customers.length
   const totalOutstanding = customers.reduce((s, c) => s + (c.credit_balance || 0), 0)
-  const goldPlus        = customers.filter(c => c.member_type === 'Gold' || c.member_type === 'Platinum').length
+  const withDues         = customers.filter(c => c.credit_balance > 0).length
 
   const columns = [
-    { title: 'ID', dataIndex: 'customer_id', key: 'customer_id', width: 90 },
+    { title: 'ID', dataIndex: 'customer_id', key: 'customer_id', width: 80 },
     {
       title: 'Name', dataIndex: 'name', key: 'name',
       render: (v, r) => (
@@ -71,34 +113,43 @@ export default function Customers() {
       ),
     },
     { title: 'Phone', dataIndex: 'phone', key: 'phone', width: 120 },
-    { title: 'City', dataIndex: 'city', key: 'city', width: 100 },
+    { title: 'City', dataIndex: 'city', key: 'city', width: 90 },
     {
-      title: 'Type', dataIndex: 'member_type', key: 'member_type', width: 100,
+      title: 'Type', dataIndex: 'member_type', key: 'member_type', width: 90,
       render: (v) => <Tag color={MEMBER_COLORS[v] || 'blue'}>{v}</Tag>,
     },
     {
-      title: 'Points', dataIndex: 'loyalty_pts', key: 'loyalty_pts', width: 75,
-      render: (v) => <Text>{v || 0}</Text>,
-    },
-    {
-      title: 'Total Purchase', dataIndex: 'total_purchase', key: 'total_purchase', width: 130,
+      title: 'Total Purchase', dataIndex: 'total_purchase', key: 'total_purchase', width: 120,
       render: (v) => <Text strong>₹{Math.round(v || 0).toLocaleString()}</Text>,
       sorter: (a, b) => (a.total_purchase || 0) - (b.total_purchase || 0),
     },
     {
-      title: 'Outstanding', dataIndex: 'credit_balance', key: 'credit_balance', width: 120,
+      title: 'Outstanding', dataIndex: 'credit_balance', key: 'credit_balance', width: 110,
       render: (v) => v > 0
         ? <Tag color="red">₹{Math.round(v).toLocaleString()}</Tag>
         : <Tag color="green">Clear</Tag>,
       sorter: (a, b) => (a.credit_balance || 0) - (b.credit_balance || 0),
     },
     {
-      title: '', key: 'action', width: 80,
+      title: 'Actions', key: 'action', width: 180,
       render: (_, r) => (
-        <Button size="small" icon={<EyeOutlined />}
-          onClick={() => navigate(`/bill-history?customer=${encodeURIComponent(r.name)}`)}>
-          Bills
-        </Button>
+        <Space size={4}>
+          <Button size="small" icon={<EyeOutlined />}
+            onClick={() => navigate(`/bill-history?customer=${encodeURIComponent(r.name)}`)}>
+            Bills
+          </Button>
+          {r.credit_balance > 0 && <>
+            <Button size="small" type="primary" icon={<DollarOutlined />}
+              onClick={() => openPayModal(r)}>
+              Pay
+            </Button>
+            <Button size="small" style={{ background: '#25D366', borderColor: '#25D366', color: '#fff' }}
+              icon={<WhatsAppOutlined />}
+              onClick={() => sendWhatsAppReminder(r)}>
+              Remind
+            </Button>
+          </>}
+        </Space>
       ),
     },
   ]
@@ -138,14 +189,15 @@ export default function Customers() {
         </Col>
         <Col xs={8}>
           <Card size="small" style={{ borderRadius: 10, textAlign: 'center' }}>
-            <Statistic title="Outstanding" prefix="₹"
+            <Statistic title="Total Outstanding" prefix="₹"
               value={Math.round(totalOutstanding).toLocaleString()}
               valueStyle={{ fontSize: 22, color: totalOutstanding > 0 ? '#cf1322' : '#3f8600' }} />
           </Card>
         </Col>
         <Col xs={8}>
           <Card size="small" style={{ borderRadius: 10, textAlign: 'center' }}>
-            <Statistic title="Gold / Platinum" value={goldPlus} valueStyle={{ fontSize: 22, color: '#d48806' }} />
+            <Statistic title="Customers with Dues" value={withDues}
+              valueStyle={{ fontSize: 22, color: withDues > 0 ? '#d46b08' : '#3f8600' }} />
           </Card>
         </Col>
       </Row>
@@ -154,35 +206,70 @@ export default function Customers() {
         <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <Input
             placeholder="Search by name, phone, or ID..."
-            value={search}
-            onChange={onSearchChange}
-            prefix={<SearchOutlined />}
-            style={{ width: 280 }}
-            allowClear
-            onClear={() => { setSearch(''); load('') }}
+            value={search} onChange={onSearchChange}
+            prefix={<SearchOutlined />} style={{ width: 280 }}
+            allowClear onClear={() => { setSearch(''); load('') }}
           />
           <Button type="primary" icon={<UserAddOutlined />} onClick={() => setAddModal(true)}>
             Add Customer
           </Button>
         </Space>
-
         <Text type="secondary" style={{ marginBottom: 8, display: 'block' }}>
           {customers.length} customer(s) found
         </Text>
-
         <Table
           dataSource={customers} columns={columns} rowKey="customer_id"
           loading={loading} size="middle"
           pagination={{ pageSize: 20, showSizeChanger: true }}
-          scroll={{ x: 900 }}
+          scroll={{ x: 1000 }}
         />
       </Card>
 
+      {/* Add Customer Modal */}
       <Modal title="Add Customer" open={addModal} onCancel={() => setAddModal(false)} footer={null} width={560}>
         <CustomerForm form={addForm} onFinish={handleAdd} />
       </Modal>
+
+      {/* Edit Customer Modal */}
       <Modal title="Edit Customer" open={editModal} onCancel={() => setEditModal(false)} footer={null} width={560}>
         <CustomerForm form={editForm} onFinish={handleEdit} />
+      </Modal>
+
+      {/* Record Payment Modal */}
+      <Modal
+        title={`💰 Record Payment — ${payTarget?.name}`}
+        open={payModal}
+        onCancel={() => setPayModal(false)}
+        onOk={handleRecordPayment}
+        okText="Record Payment"
+        okButtonProps={{ loading: payLoading }}
+        width={420}
+      >
+        {payTarget && (
+          <div>
+            <Alert
+              type="warning" showIcon style={{ marginBottom: 16 }}
+              message={`Outstanding balance: ₹${Math.round(payTarget.credit_balance).toLocaleString()}`}
+            />
+            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <div>
+                <Text strong>Amount Received (₹)</Text>
+                <InputNumber
+                  style={{ width: '100%', marginTop: 6 }}
+                  min={1} max={Math.round(payTarget.credit_balance)}
+                  value={payAmount} onChange={setPayAmount}
+                  size="large"
+                />
+              </div>
+              <div>
+                <Text strong>Payment Mode</Text>
+                <Select value={payMode} onChange={setPayMode} style={{ width: '100%', marginTop: 6 }} size="large">
+                  {PAYMENT_MODES.map(m => <Select.Option key={m} value={m}>{m}</Select.Option>)}
+                </Select>
+              </div>
+            </Space>
+          </div>
+        )}
       </Modal>
     </div>
   )

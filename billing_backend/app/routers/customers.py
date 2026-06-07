@@ -15,7 +15,6 @@ from app.schemas.schemas import CustomerCreate, CustomerOut, CustomerUpdate, Mes
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
-
 def _next_customer_id(db: Session, store_code: str) -> str:
     count = db.query(Customer).filter(Customer.store_code == store_code).count()
     return f"CUST{(count + 1):03d}"
@@ -125,6 +124,33 @@ def update_customer(
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(cust, field, value)
 
+    db.commit()
+    db.refresh(cust)
+    return cust
+
+
+# ── POST /customers/{customer_id}/record-payment ─────────────────────────────
+
+@router.post("/{customer_id}/record-payment", response_model=CustomerOut)
+def record_credit_payment(
+    customer_id: str,
+    amount: float = Query(..., gt=0),
+    payment_mode: str = Query("Cash"),
+    notes: Optional[str] = Query(None),
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    sc = identity["store_code"]
+    cust = db.query(Customer).filter(
+        Customer.store_code == sc, Customer.customer_id == customer_id
+    ).first()
+    if not cust:
+        raise HTTPException(status_code=404, detail="Customer not found.")
+    if not cust.credit_balance or cust.credit_balance <= 0:
+        raise HTTPException(status_code=400, detail="No outstanding balance for this customer.")
+
+    paid = min(round(amount, 2), round(cust.credit_balance, 2))
+    cust.credit_balance = round(max(0, cust.credit_balance - paid), 2)
     db.commit()
     db.refresh(cust)
     return cust

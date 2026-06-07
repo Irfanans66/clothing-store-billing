@@ -40,6 +40,10 @@ export const getCustomers = (params = {}) => api.get('/customers/', { params })
 export const getCustomer = (id) => api.get(`/customers/${id}`)
 export const createCustomer = (data) => api.post('/customers/', data)
 export const updateCustomer = (id, data) => api.patch(`/customers/${id}`, data)
+export const recordCreditPayment = (id, amount, paymentMode, notes) =>
+  api.post(`/customers/${id}/record-payment`, null, {
+    params: { amount, payment_mode: paymentMode, notes },
+  })
 
 // ── Products ──────────────────────────────────────────────────────────────────
 export const getProducts = (params = {}) => api.get('/products/', { params })
