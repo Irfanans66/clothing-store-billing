@@ -92,15 +92,15 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
 
     W   = (58 if is_2inch else 80) * mm
     buf = io.BytesIO()
-    H   = (85 + len(raw_items) * 15 + 60 + (qr_size_mm + 20 if has_qr else 0)) * mm if is_2inch \
-          else (90 + len(raw_items) * 16 + 68 + (qr_size_mm + 24 if has_qr else 0)) * mm
+    H   = (90 + len(raw_items) * 17 + 65 + (qr_size_mm + 20 if has_qr else 0)) * mm if is_2inch \
+          else (90 + len(raw_items) * 17 + 68 + (qr_size_mm + 24 if has_qr else 0)) * mm
     c   = rl_canvas.Canvas(buf, pagesize=(W, H))
     y   = H - 5 * mm
 
     # font/layout constants differ by paper size
     _ctr_sz  = 9  if is_2inch else 10
-    _lft_sz  = 8  if is_2inch else 9
-    _rw_sz   = 8  if is_2inch else 9
+    _lft_sz  = 9  if is_2inch else 9
+    _rw_sz   = 9  if is_2inch else 9
     _dash_ch = 32 if is_2inch else 44
     _lft_max = 36 if is_2inch else 50
     _rw_max  = 22 if is_2inch else 32
@@ -130,9 +130,10 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
 
     def dash():
         nonlocal y
-        c.setFont("Courier", 7)
+        _dsz = 8 if is_2inch else 7
+        c.setFont("Courier", _dsz)
         c.drawCentredString(W / 2, y, "-" * _dash_ch)
-        y -= 3.2 * mm
+        y -= (3.2 if not is_2inch else 3.8) * mm
 
     ctr(store.store_name if store else "STORE", sz=13)
     if store:
@@ -150,8 +151,9 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
     for r in raw_items:
         # Columns: id, bill_id, store_code, item_id, product_name, category, size, color,
         #          qty, mrp, selling_price, discount_pct, subtotal, gst_pct, gst_amt, total
-        lft(f"{str(r[4] or '')[:24]} ({r[6] or ''})", sz=7)
-        rw(f"  {r[8]}x Rs.{r[10]:.2f} [GST {r[13]}%]", f"Rs.{r[12]:.2f}", sz=7)
+        _item_sz = 8 if is_2inch else 8
+        lft(f"{str(r[4] or '')[:24]} ({r[6] or ''})", sz=_item_sz)
+        rw(f"  {r[8]}x Rs.{r[10]:.2f} [GST {r[13]}%]", f"Rs.{r[12]:.2f}", sz=_item_sz)
 
     dash()
     rw("Subtotal", f"Rs.{bill.subtotal:.2f}")
