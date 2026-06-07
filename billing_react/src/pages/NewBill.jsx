@@ -626,33 +626,78 @@ export default function NewBill() {
             size={isMobile ? 'small' : 'default'}
             style={{ marginBottom: 12, borderRadius: 12 }}
           >
-            <Row gutter={8} align="middle" wrap>
-              <Col xs={24} sm flex="auto" style={{ marginBottom: isMobile ? 8 : 0 }}>
-                <Input
-                  ref={itemInputRef}
-                  placeholder="Item ID / name — Enter to add"
-                  value={itemId}
-                  onChange={(e) => { setItemId(e.target.value); setSearchHits([]) }}
-                  onPressEnter={handleItemEnter}
-                  prefix={<SearchOutlined />}
-                  suffix={addingItem ? <Spin size="small" /> : null}
-                  size="large"
-                  autoFocus
-                />
-              </Col>
-              <Col xs={12} sm="auto">
-                <InputNumber
-                  min={1} max={500} value={qty} onChange={setQty}
-                  style={{ width: '100%' }} size="large" placeholder="Qty"
-                  addonBefore="Qty"
-                />
-              </Col>
-              <Col xs={12} sm="auto">
-                <Select value={size} onChange={setSize} style={{ width: '100%', minWidth: 90 }} size="large">
-                  {SIZE_OPTIONS.map((s) => <Select.Option key={s} value={s}>{s}</Select.Option>)}
-                </Select>
-              </Col>
-            </Row>
+            {/* Search input */}
+            <Input
+              ref={itemInputRef}
+              placeholder="Search by item ID or name..."
+              value={itemId}
+              onChange={(e) => {
+                const val = e.target.value
+                setItemId(val)
+                setSearchHits([])
+                if (isMobile && val.trim().length >= 2) {
+                  clearTimeout(window._itemSearchTimer)
+                  window._itemSearchTimer = setTimeout(async () => {
+                    setAddingItem(true)
+                    try {
+                      const hits = await getProducts({ search: val.trim() })
+                      if (hits?.length) setSearchHits(hits)
+                    } catch {} finally { setAddingItem(false) }
+                  }, 350)
+                }
+              }}
+              onPressEnter={handleItemEnter}
+              prefix={<SearchOutlined />}
+              suffix={addingItem ? <Spin size="small" /> : null}
+              size="large"
+              autoFocus={!isMobile}
+              style={{ marginBottom: 10 }}
+            />
+
+            {/* Qty +/- and Size — phone-friendly layout */}
+            {isMobile ? (
+              <div>
+                {/* Qty row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <Text type="secondary" style={{ fontSize: 13, minWidth: 28 }}>Qty</Text>
+                  <Button size="large" style={{ width: 44, fontWeight: 700, fontSize: 18 }}
+                    onClick={() => setQty(q => Math.max(1, q - 1))}>−</Button>
+                  <div style={{
+                    width: 52, textAlign: 'center', fontSize: 20, fontWeight: 700,
+                    border: '1px solid #d9d9d9', borderRadius: 6, padding: '4px 0',
+                  }}>{qty}</div>
+                  <Button size="large" type="primary" style={{ width: 44, fontWeight: 700, fontSize: 18 }}
+                    onClick={() => setQty(q => q + 1)}>+</Button>
+                </div>
+                {/* Size buttons — scrollable row */}
+                <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+                  <div style={{ display: 'flex', gap: 6, width: 'max-content' }}>
+                    {SIZE_OPTIONS.map((s) => (
+                      <Button
+                        key={s} size="middle"
+                        type={size === s ? 'primary' : 'default'}
+                        onClick={() => setSize(s)}
+                        style={{ minWidth: 44, fontWeight: size === s ? 700 : 400 }}
+                      >{s}</Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+                <Col sm="auto">
+                  <InputNumber
+                    min={1} max={500} value={qty} onChange={setQty}
+                    style={{ width: 110 }} size="large" addonBefore="Qty"
+                  />
+                </Col>
+                <Col sm="auto">
+                  <Select value={size} onChange={setSize} style={{ minWidth: 90 }} size="large">
+                    {SIZE_OPTIONS.map((s) => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+                  </Select>
+                </Col>
+              </Row>
+            )}
 
             <div style={{ marginTop: 8 }}>
               <Button
