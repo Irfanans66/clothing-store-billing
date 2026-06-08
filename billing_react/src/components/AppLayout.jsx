@@ -79,10 +79,10 @@ function BrandHeader({ collapsed, storeName }) {
       borderBottom: '1px solid rgba(255,255,255,0.15)',
     }}>
       <div style={{ color: '#fff', fontSize: collapsed ? 20 : 16, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {collapsed ? '👗' : `👗 ${storeName || 'Billing'}`}
+        {collapsed ? '🧾' : `🧾 Local Billing`}
       </div>
       {!collapsed && (
-        <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Billing System</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>{storeName || ''}</Text>
       )}
     </div>
   )

@@ -51,9 +51,9 @@ export default function Login() {
     }}>
       <div style={{ width: '100%', maxWidth: 480 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontSize: 56 }}>👗</div>
+          <div style={{ fontSize: 56 }}>🧾</div>
           <Title level={2} style={{ color: '#fff', margin: '8px 0 4px' }}>
-            Readymade House
+            Local Billing
           </Title>
           <Text style={{ color: 'rgba(255,255,255,0.7)' }}>
             Billing & Inventory Management
