@@ -57,7 +57,8 @@ const ROLE_COLORS = {
   Viewer: 'default', SuperAdmin: 'purple',
 }
 
-const SIDER_BG = '#1A237E'
+const SIDER_GRADIENT = 'linear-gradient(160deg, #0a0118 0%, #160332 55%, #0d0225 100%)'
+const PRIMARY = '#863bff'
 
 function NavMenu({ menuItems, selectedKey, onSelect }) {
   return (
@@ -67,7 +68,7 @@ function NavMenu({ menuItems, selectedKey, onSelect }) {
       selectedKeys={[selectedKey]}
       items={menuItems}
       onClick={({ key }) => onSelect(key)}
-      style={{ background: SIDER_BG, borderRight: 0, marginTop: 8 }}
+      style={{ background: 'transparent', borderRight: 0, marginTop: 8, padding: '0 8px' }}
     />
   )
 }
@@ -75,15 +76,35 @@ function NavMenu({ menuItems, selectedKey, onSelect }) {
 function BrandHeader({ collapsed, storeName }) {
   return (
     <div style={{
-      padding: collapsed ? '18px 12px' : '18px 16px',
-      borderBottom: '1px solid rgba(255,255,255,0.15)',
+      padding: collapsed ? '16px 12px' : '16px 20px',
+      borderBottom: '1px solid rgba(255,255,255,0.1)',
+      background: 'rgba(0,0,0,0.15)',
     }}>
-      <div style={{ color: '#fff', fontSize: collapsed ? 20 : 16, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {collapsed ? '🧾' : `🧾 Local Billing`}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
+        <img src="/logo-icon.svg" alt="logo"
+          style={{ width: collapsed ? 32 : 36, height: collapsed ? 32 : 36, flexShrink: 0, borderRadius: 8 }}
+        />
+        {!collapsed && (
+          <div style={{ overflow: 'hidden' }}>
+            <div style={{
+              color: '#fff', fontSize: 15, fontWeight: 700,
+              fontFamily: "'Poppins', sans-serif",
+              letterSpacing: '0.3px',
+              background: 'linear-gradient(90deg, #fff 30%, #a78bfa)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              whiteSpace: 'nowrap',
+            }}>
+              Local Billing
+            </div>
+            {storeName && (
+              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {storeName}
+              </Text>
+            )}
+          </div>
+        )}
       </div>
-      {!collapsed && (
-        <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>{storeName || ''}</Text>
-      )}
     </div>
   )
 }
@@ -128,9 +149,10 @@ export default function AppLayout() {
           trigger={null}
           width={220}
           style={{
-            background: SIDER_BG,
+            background: SIDER_GRADIENT,
             position: 'fixed', height: '100vh',
             left: 0, top: 0, overflow: 'auto', zIndex: 100,
+            boxShadow: '4px 0 24px rgba(18,0,41,0.35)',
           }}
         >
           <BrandHeader collapsed={collapsed} storeName={storeName} />
@@ -145,7 +167,7 @@ export default function AppLayout() {
           onClose={() => setDrawerOpen(false)}
           placement="left"
           width={240}
-          bodyStyle={{ padding: 0, background: SIDER_BG }}
+          bodyStyle={{ padding: 0, background: SIDER_GRADIENT }}
           headerStyle={{ display: 'none' }}
         >
           <BrandHeader collapsed={false} storeName={storeName} />
@@ -155,9 +177,11 @@ export default function AppLayout() {
 
       <Layout style={{ marginLeft: isMobile ? 0 : (collapsed ? 80 : 220), transition: 'margin-left 0.2s' }}>
         <Header style={{
-          background: token.colorBgContainer, padding: isMobile ? '0 12px' : '0 24px',
+          background: token.colorBgContainer,
+          padding: isMobile ? '0 12px' : '0 24px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+          boxShadow: '0 1px 0 rgba(124,58,237,0.1), 0 2px 12px rgba(124,58,237,0.06)',
+          borderBottom: '1px solid rgba(124,58,237,0.08)',
           position: 'sticky', top: 0, zIndex: 99,
           height: 56,
         }}>
@@ -185,7 +209,7 @@ export default function AppLayout() {
             <Tag color={ROLE_COLORS[role] || 'default'} style={{ margin: 0 }}>{role}</Tag>
             <Dropdown menu={userMenu} trigger={['click']}>
               <Space style={{ cursor: 'pointer' }}>
-                <Avatar style={{ background: SIDER_BG, width: 32, height: 32, lineHeight: '32px' }}>
+                <Avatar style={{ background: 'linear-gradient(135deg, #863bff, #47bfff)', width: 32, height: 32, lineHeight: '32px', fontWeight: 700 }}>
                   {username?.[0]?.toUpperCase()}
                 </Avatar>
               </Space>

@@ -1,0 +1,257 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0118"/>
+      <stop offset="60%" stop-color="#160332"/>
+      <stop offset="100%" stop-color="#0d0225"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#863bff"/>
+      <stop offset="100%" stop-color="#47bfff"/>
+    </linearGradient>
+    <linearGradient id="accentGradV" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#863bff"/>
+      <stop offset="100%" stop-color="#47bfff"/>
+    </linearGradient>
+    <linearGradient id="receiptGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ede6ff"/>
+    </linearGradient>
+    <filter id="receiptShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="28" flood-color="#863bff" flood-opacity="0.55"/>
+    </filter>
+    <filter id="glowText">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1080" height="1080" fill="url(#bgGrad)"/>
+
+  <!-- Ambient glow blobs -->
+  <ellipse cx="180" cy="200" rx="200" ry="180" fill="#863bff" opacity="0.07"/>
+  <ellipse cx="900" cy="880" rx="220" ry="200" fill="#47bfff" opacity="0.06"/>
+  <ellipse cx="920" cy="200" rx="140" ry="120" fill="#863bff" opacity="0.09"/>
+  <ellipse cx="160" cy="900" rx="120" ry="100" fill="#47bfff" opacity="0.06"/>
+
+  <!-- Subtle grid dots pattern -->
+  <g opacity="0.04">
+    <circle cx="100" cy="100" r="2" fill="white"/>
+    <circle cx="200" cy="100" r="2" fill="white"/>
+    <circle cx="300" cy="100" r="2" fill="white"/>
+    <circle cx="400" cy="100" r="2" fill="white"/>
+    <circle cx="500" cy="100" r="2" fill="white"/>
+    <circle cx="600" cy="100" r="2" fill="white"/>
+    <circle cx="700" cy="100" r="2" fill="white"/>
+    <circle cx="800" cy="100" r="2" fill="white"/>
+    <circle cx="900" cy="100" r="2" fill="white"/>
+    <circle cx="1000" cy="100" r="2" fill="white"/>
+    <circle cx="100" cy="200" r="2" fill="white"/>
+    <circle cx="200" cy="200" r="2" fill="white"/>
+    <circle cx="300" cy="200" r="2" fill="white"/>
+    <circle cx="400" cy="200" r="2" fill="white"/>
+    <circle cx="500" cy="200" r="2" fill="white"/>
+    <circle cx="600" cy="200" r="2" fill="white"/>
+    <circle cx="700" cy="200" r="2" fill="white"/>
+    <circle cx="800" cy="200" r="2" fill="white"/>
+    <circle cx="900" cy="200" r="2" fill="white"/>
+    <circle cx="1000" cy="200" r="2" fill="white"/>
+  </g>
+
+  <!-- ===== RECEIPT ICON ===== -->
+  <!-- Receipt paper with zigzag bottom -->
+  <path d="
+    M 330 90
+    L 750 90
+    L 750 560
+    L 735 578 L 720 560
+    L 705 578 L 690 560
+    L 675 578 L 660 560
+    L 645 578 L 630 560
+    L 615 578 L 600 560
+    L 585 578 L 570 560
+    L 555 578 L 540 560
+    L 525 578 L 510 560
+    L 495 578 L 480 560
+    L 465 578 L 450 560
+    L 435 578 L 420 560
+    L 405 578 L 390 560
+    L 375 578 L 360 560
+    L 345 578 L 330 560
+    Z"
+    fill="url(#receiptGrad)"
+    filter="url(#receiptShadow)"
+  />
+
+  <!-- Fold corner (dog-ear) top right -->
+  <polygon points="690,90 750,90 750,150" fill="#d4b8ff" opacity="0.7"/>
+  <line x1="690" y1="90" x2="750" y2="150" stroke="#b090e8" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- ===== RECEIPT CONTENT ===== -->
+
+  <!-- Store header -->
+  <text x="525" y="148"
+    text-anchor="middle"
+    fill="#863bff"
+    font-family="Arial Black, Arial, sans-serif"
+    font-size="22"
+    font-weight="900"
+    letter-spacing="3">LOCAL BILLING</text>
+
+  <!-- Sub header -->
+  <text x="525" y="170"
+    text-anchor="middle"
+    fill="#b090e8"
+    font-family="Arial, sans-serif"
+    font-size="13"
+    letter-spacing="2">SMART POS SYSTEM</text>
+
+  <!-- Divider line -->
+  <line x1="350" y1="185" x2="735" y2="185" stroke="#d4b8ff" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+  <!-- Item rows -->
+  <!-- Row 1 -->
+  <text x="355" y="215" fill="#7c5cbf" font-family="Arial, sans-serif" font-size="14">Cotton Kurta</text>
+  <text x="730" y="215" text-anchor="end" fill="#7c5cbf" font-family="Arial, sans-serif" font-size="14">₹850</text>
+
+  <!-- Row 2 -->
+  <text x="355" y="241" fill="#7c5cbf" font-family="Arial, sans-serif" font-size="14">Denim Jeans (32)</text>
+  <text x="730" y="241" text-anchor="end" fill="#7c5cbf" font-family="Arial, sans-serif" font-size="14">₹1,200</text>
+
+  <!-- Row 3 -->
+  <text x="355" y="267" fill="#7c5cbf" font-family="Arial, sans-serif" font-size="14">Silk Dupatta</text>
+  <text x="730" y="267" text-anchor="end" fill="#7c5cbf" font-family="Arial, sans-serif" font-size="14">₹550</text>
+
+  <!-- Row 4 -->
+  <text x="355" y="293" fill="#7c5cbf" font-family="Arial, sans-serif" font-size="14">T-Shirt (M)</text>
+  <text x="730" y="293" text-anchor="end" fill="#7c5cbf" font-family="Arial, sans-serif" font-size="14">₹399</text>
+
+  <!-- Dotted divider -->
+  <line x1="350" y1="310" x2="735" y2="310" stroke="#d4b8ff" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+  <!-- GST row -->
+  <text x="355" y="333" fill="#9070c0" font-family="Arial, sans-serif" font-size="13">GST (5%)</text>
+  <text x="730" y="333" text-anchor="end" fill="#9070c0" font-family="Arial, sans-serif" font-size="13">₹149.95</text>
+
+  <!-- Solid divider before total -->
+  <line x1="350" y1="348" x2="735" y2="348" stroke="#c0a0f0" stroke-width="2"/>
+
+  <!-- TOTAL box -->
+  <rect x="350" y="358" width="385" height="62" rx="12" fill="#863bff"/>
+  <!-- Glow for total box -->
+  <rect x="350" y="358" width="385" height="62" rx="12" fill="none" stroke="#a060ff" stroke-width="1.5" opacity="0.6"/>
+  <text x="440" y="382" fill="white" font-family="Arial, sans-serif" font-size="13" opacity="0.85">TOTAL AMOUNT</text>
+  <text x="730" y="396" text-anchor="end" fill="white" font-family="Arial Black, sans-serif" font-size="24" font-weight="900">₹ 3,148.95</text>
+  <text x="355" y="396" fill="white" font-family="Arial, sans-serif" font-size="13" opacity="0.85">Qty: 4 items</text>
+
+  <!-- PAID stamp / checkmark badge -->
+  <circle cx="540" cy="490" r="38" fill="#47bfff" opacity="0.18"/>
+  <circle cx="540" cy="490" r="30" fill="#47bfff" opacity="0.25"/>
+  <circle cx="540" cy="490" r="22" fill="#47bfff" opacity="0.4"/>
+  <!-- Checkmark -->
+  <path d="M 526 490 L 536 500 L 556 478"
+    stroke="#47bfff"
+    stroke-width="5"
+    fill="none"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#softGlow)"/>
+
+  <!-- Barcode at bottom of receipt -->
+  <g opacity="0.45">
+    <rect x="390" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="397" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="403" y="528" width="5" height="24" rx="2" fill="#9070c0"/>
+    <rect x="412" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="418" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="425" y="528" width="4" height="24" rx="2" fill="#9070c0"/>
+    <rect x="433" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="439" y="528" width="5" height="24" rx="2" fill="#9070c0"/>
+    <rect x="448" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="454" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="461" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="467" y="528" width="5" height="24" rx="2" fill="#9070c0"/>
+    <rect x="476" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="483" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="489" y="528" width="4" height="24" rx="2" fill="#9070c0"/>
+    <rect x="497" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="503" y="528" width="5" height="24" rx="2" fill="#9070c0"/>
+    <rect x="512" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="519" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="525" y="528" width="4" height="24" rx="2" fill="#9070c0"/>
+    <rect x="533" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="539" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="546" y="528" width="5" height="24" rx="2" fill="#9070c0"/>
+    <rect x="555" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="561" y="528" width="4" height="24" rx="2" fill="#9070c0"/>
+    <rect x="569" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="576" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="582" y="528" width="5" height="24" rx="2" fill="#9070c0"/>
+    <rect x="591" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="597" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="604" y="528" width="4" height="24" rx="2" fill="#9070c0"/>
+    <rect x="612" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="618" y="528" width="5" height="24" rx="2" fill="#9070c0"/>
+    <rect x="627" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="634" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="640" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="647" y="528" width="4" height="24" rx="2" fill="#9070c0"/>
+    <rect x="655" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="661" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+    <rect x="668" y="528" width="5" height="24" rx="2" fill="#9070c0"/>
+    <rect x="677" y="528" width="2" height="24" rx="1" fill="#9070c0"/>
+    <rect x="683" y="528" width="3" height="24" rx="1.5" fill="#9070c0"/>
+  </g>
+
+  <!-- ===== APP NAME TEXT ===== -->
+
+  <!-- "LOCAL" main title -->
+  <text x="540" y="720"
+    text-anchor="middle"
+    fill="white"
+    font-family="Arial Black, Arial, sans-serif"
+    font-size="130"
+    font-weight="900"
+    letter-spacing="6"
+    filter="url(#glowText)">LOCAL</text>
+
+  <!-- "BILLING" subtitle with gradient -->
+  <text x="540" y="820"
+    text-anchor="middle"
+    fill="url(#accentGrad)"
+    font-family="Arial, sans-serif"
+    font-size="82"
+    font-weight="200"
+    letter-spacing="28">BILLING</text>
+
+  <!-- Tagline -->
+  <text x="540" y="878"
+    text-anchor="middle"
+    fill="#ede6ff"
+    font-family="Arial, sans-serif"
+    font-size="22"
+    opacity="0.45"
+    letter-spacing="6">SMART POS FOR CLOTHING STORES</text>
+
+  <!-- Accent decorative line below tagline -->
+  <rect x="390" y="898" width="300" height="3" rx="1.5" fill="url(#accentGrad)" opacity="0.55"/>
+
+  <!-- Small decorative dots -->
+  <circle cx="378" cy="899" r="4" fill="#863bff" opacity="0.7"/>
+  <circle cx="702" cy="899" r="4" fill="#47bfff" opacity="0.7"/>
+
+  <!-- Version / website hint (very subtle) -->
+  <text x="540" y="960"
+    text-anchor="middle"
+    fill="#ede6ff"
+    font-family="Arial, sans-serif"
+    font-size="18"
+    opacity="0.2"
+    letter-spacing="3">localbilling.app</text>
+
+</svg>

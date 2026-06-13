@@ -46,22 +46,63 @@ export default function Login() {
 
   return (
     <div style={{
-      minHeight: '100vh', background: 'linear-gradient(135deg, #1A237E 0%, #3949AB 100%)',
+      minHeight: '100vh',
+      background: 'linear-gradient(160deg, #0a0118 0%, #160332 55%, #0d0225 100%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      position: 'relative', overflow: 'hidden',
     }}>
-      <div style={{ width: '100%', maxWidth: 480 }}>
+      {/* Decorative blobs — logo purple & cyan */}
+      <div style={{
+        position: 'absolute', top: -100, left: -100,
+        width: 380, height: 380, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(134,59,255,0.22) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }}/>
+      <div style={{
+        position: 'absolute', bottom: -80, right: -80,
+        width: 320, height: 320, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(71,191,255,0.16) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }}/>
+      <div style={{
+        position: 'absolute', top: '40%', right: -60,
+        width: 220, height: 220, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(134,59,255,0.12) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }}/>
+
+      <div style={{ width: '100%', maxWidth: 460, position: 'relative', zIndex: 1 }}>
+        {/* Brand */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontSize: 56 }}>🧾</div>
-          <Title level={2} style={{ color: '#fff', margin: '8px 0 4px' }}>
+          <img src="/logo-icon.svg" alt="Local Billing Logo"
+            style={{ width: 88, height: 88, borderRadius: 20, boxShadow: '0 8px 32px rgba(124,58,237,0.5)', marginBottom: 16 }}
+          />
+          <Title level={2} style={{
+            margin: '0 0 6px',
+            fontFamily: "'Poppins', sans-serif",
+            fontWeight: 800,
+            background: 'linear-gradient(90deg, #ffffff 30%, #a78bfa)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+            letterSpacing: '-0.5px',
+          }}>
             Local Billing
           </Title>
-          <Text style={{ color: 'rgba(255,255,255,0.7)' }}>
-            Billing & Inventory Management
+          <Text style={{
+            color: 'rgba(255,255,255,0.55)',
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: 13, letterSpacing: '0.5px',
+          }}>
+            Smart POS for Clothing Stores
           </Text>
         </div>
 
         <Card
-          style={{ borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}
+          style={{
+            borderRadius: 20,
+            boxShadow: '0 16px 48px rgba(0,0,0,0.35), 0 0 0 1px rgba(124,58,237,0.15)',
+            border: 'none',
+            backdropFilter: 'blur(10px)',
+          }}
           styles={{ body: { padding: '32px 28px' } }}
         >
           <Tabs

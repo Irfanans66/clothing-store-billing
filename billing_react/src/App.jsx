@@ -31,7 +31,13 @@ export default function App() {
     <ConfigProvider
       theme={{
         algorithm: darkMode ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
-        token: { colorPrimary: '#1A237E' },
+        token: {
+          colorPrimary:   '#7C3AED',
+          colorLink:      '#7C3AED',
+          fontFamily:     "'Poppins', 'Inter', 'Segoe UI', sans-serif",
+          borderRadius:   10,
+          colorBgLayout:  darkMode ? '#0f0a1e' : '#F5F3FF',
+        },
       }}
     >
       <BrowserRouter>
