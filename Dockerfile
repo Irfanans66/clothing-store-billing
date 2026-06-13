@@ -1,9 +1,9 @@
 # Stage 1: Build React frontend
 FROM node:20-alpine AS react-build
 WORKDIR /app
-COPY billing_react/package*.json ./
+COPY billing_react/billing_react/package*.json ./
 RUN npm ci
-COPY billing_react/ ./
+COPY billing_react/billing_react/ ./
 RUN npm run build
 
 # Stage 2: Python backend (serves React + API)

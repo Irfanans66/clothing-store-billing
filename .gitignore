@@ -25,10 +25,16 @@ env/
 # Node
 node_modules/
 billing_react/node_modules/
+billing_react/billing_react/node_modules/
 
 # Build output (built on Railway)
 billing_react/dist/
+billing_react/billing_react/dist/
 billing_backend/dist/
+
+# Vite cache and Netlify
+billing_react/.vite/
+billing_react/.netlify/
 
 # Unrelated folders
 billing_android/
