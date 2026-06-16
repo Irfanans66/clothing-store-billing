@@ -88,7 +88,7 @@ async function drawLabel(product, W_mm, H_mm, storeName) {
 
   // Barcode SVG → Image → Canvas
   const bc = (product.barcode || product.item_id || '').toString()
-  const barH = Math.round(bodyH * 0.44)
+  const barH = Math.round(bodyH * 0.28)
   const barY = sepY + Math.round(bodyH * 0.03)
 
   try {
@@ -115,13 +115,13 @@ async function drawLabel(product, W_mm, H_mm, storeName) {
     })
   } catch { /* skip barcode on error */ }
 
-  // Barcode text + Item ID
-  ctx.fillStyle = '#555555'
-  const bcTextSize = Math.round(bodyH * 0.14)
+  // Barcode text + Item ID — kept small so it doesn't overlap the MRP footer
+  ctx.fillStyle = '#000000'
+  const bcTextSize = Math.round(bodyH * 0.11)
   ctx.font = `${bcTextSize}px Arial`
   ctx.textBaseline = 'top'
   const bcLine = product.item_id ? `${bc}  |  ${product.item_id}` : bc
-  ctx.fillText(bcLine, W / 2, barY + barH + 2)
+  ctx.fillText(bcLine, W / 2, barY + barH + 1)
 
   // Gray footer
   ctx.fillStyle = '#f0f0f0'
