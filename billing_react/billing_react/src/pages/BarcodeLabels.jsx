@@ -115,22 +115,20 @@ async function drawLabel(product, W_mm, H_mm, storeName) {
     })
   } catch { /* skip barcode on error */ }
 
-  // Barcode text + Item ID — kept small so it doesn't overlap the MRP footer
-  ctx.fillStyle = '#000000'
-  const bcTextSize = Math.round(bodyH * 0.11)
-  ctx.font = `${bcTextSize}px Arial`
-  ctx.textBaseline = 'top'
+  // Footer — MRP top row, barcode number bottom row (drawn together to prevent overlap)
   const bcLine = product.item_id ? `${bc}  |  ${product.item_id}` : bc
-  ctx.fillText(bcLine, W / 2, barY + barH + 1)
-
-  // Gray footer
   ctx.fillStyle = '#f0f0f0'
   ctx.fillRect(0, H - ftrH, W, ftrH)
-  ctx.fillStyle = '#1A237E'
-  ctx.font = `bold ${Math.round(ftrH * 0.55)}px Arial`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(`MRP: Rs. ${Math.round(product.mrp || 0).toLocaleString()}`, W / 2, H - ftrH / 2)
+
+  ctx.fillStyle = '#1A237E'
+  ctx.font = `bold ${Math.round(ftrH * 0.38)}px Arial`
+  ctx.fillText(`MRP: Rs. ${Math.round(product.mrp || 0).toLocaleString()}`, W / 2, H - ftrH + Math.round(ftrH * 0.33))
+
+  ctx.fillStyle = '#333333'
+  ctx.font = `${Math.round(ftrH * 0.24)}px Arial`
+  ctx.fillText(bcLine, W / 2, H - ftrH + Math.round(ftrH * 0.72))
 
   // Border
   ctx.strokeStyle = '#1A237E'
