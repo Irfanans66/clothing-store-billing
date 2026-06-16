@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import {
-  Card, Form, Input, Button, Typography, Tag, Table, Space, message, Divider,
+  Card, Form, Input, Button, Typography, Tag, Table, Space, message,
 } from 'antd'
-import { QuestionCircleOutlined, SendOutlined, HistoryOutlined } from '@ant-design/icons'
+import { QuestionCircleOutlined, SendOutlined } from '@ant-design/icons'
 import { submitSupportTicket, getMyTickets } from '../api/client'
 
-const { Title, Text, Paragraph } = Typography
+const { Title, Text } = Typography
 const { TextArea } = Input
 
 const STATUS_COLOR = { Open: 'orange', 'In Progress': 'blue', Resolved: 'green' }
@@ -106,10 +106,7 @@ export default function Help() {
 
       {/* Ticket history */}
       <Card style={{ borderRadius: 12 }}>
-        <Space style={{ marginBottom: 12 }}>
-          <HistoryOutlined style={{ color: '#7C3AED' }} />
-          <Title level={5} style={{ margin: 0 }}>My Previous Tickets</Title>
-        </Space>
+        <Title level={5} style={{ marginBottom: 12 }}>My Previous Tickets</Title>
         <Table
           dataSource={tickets}
           columns={columns}
@@ -121,7 +118,7 @@ export default function Help() {
             expandedRowRender: (r) => (
               <div style={{ padding: '8px 16px' }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>Your message:</Text>
-                <Paragraph style={{ marginTop: 4, marginBottom: 0 }}>{r.message}</Paragraph>
+                <p style={{ marginTop: 4, marginBottom: 0 }}>{r.message}</p>
               </div>
             ),
           }}
