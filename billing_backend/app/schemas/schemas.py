@@ -369,6 +369,9 @@ class StoreStat(BaseModel):
     store_code: str
     store_name: str
     owner_user: str
+    email: Optional[str]
+    phone: Optional[str]
+    address: Optional[str]
     plan: str
     is_active: bool
     customers: int
@@ -377,6 +380,30 @@ class StoreStat(BaseModel):
     revenue: float
     created_at: Optional[datetime]
     last_login: Optional[datetime]
+
+
+# ── Support Tickets ───────────────────────────────────────────────────────────
+
+class SupportTicketCreate(BaseModel):
+    subject: str
+    message: str
+
+class SupportTicketReply(BaseModel):
+    status: Optional[str] = None
+    admin_reply: Optional[str] = None
+
+class SupportTicketOut(BaseModel):
+    model_config = {"from_attributes": True}
+    id: int
+    store_code: str
+    store_name: Optional[str]
+    username: Optional[str]
+    subject: str
+    message: str
+    status: str
+    admin_reply: Optional[str]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
 
 
 # ── Generic responses ─────────────────────────────────────────────────────────

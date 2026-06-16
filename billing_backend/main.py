@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.core.database import engine, Base, SessionLocal
 from app.core.security import hash_password
 from app.models.models import SuperAdmin, Store
-from app.routers import auth, customers, products, bills, reports, store_users, admin
+from app.routers import auth, customers, products, bills, reports, store_users, admin, support
 
 settings = get_settings()
 
@@ -114,6 +114,7 @@ app.include_router(bills.router,     prefix=PREFIX)
 app.include_router(reports.router,     prefix=PREFIX)
 app.include_router(store_users.router, prefix=PREFIX)
 app.include_router(admin.router,      prefix=PREFIX)
+app.include_router(support.router,    prefix=PREFIX)
 
 
 # ── Serve React frontend ──────────────────────────────────────────────────────

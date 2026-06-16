@@ -226,3 +226,19 @@ class SuperAdmin(Base):
     username      = Column(String(50), unique=True, nullable=False)
     password_hash = Column(String(200), nullable=False)
     created_at    = Column(DateTime, default=_now)
+
+
+# ── Support Tickets ───────────────────────────────────────────────────────────
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    store_code  = Column(String(20), nullable=False, index=True)
+    store_name  = Column(String(100))
+    username    = Column(String(50))
+    subject     = Column(String(200), nullable=False)
+    message     = Column(Text, nullable=False)
+    status      = Column(String(20), default="Open")
+    admin_reply = Column(Text, nullable=True)
+    created_at  = Column(DateTime, default=_now)
+    updated_at  = Column(DateTime, default=_now, onupdate=_now)
