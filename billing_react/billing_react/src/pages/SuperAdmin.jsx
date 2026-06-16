@@ -300,20 +300,6 @@ export default function SuperAdmin() {
                 <Table
                   dataSource={tickets} columns={ticketColumns} rowKey="id"
                   size="small" pagination={{ pageSize: 20 }} scroll={{ x: 800 }}
-                  expandable={{
-                    expandedRowRender: (t) => (
-                      <div style={{ padding: '8px 16px' }}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>Message:</Text>
-                        <p style={{ marginTop: 4, marginBottom: t.admin_reply ? 12 : 0 }}>{t.message}</p>
-                        {t.admin_reply && (
-                          <>
-                            <Text type="secondary" style={{ fontSize: 12 }}>Your reply:</Text>
-                            <p style={{ marginTop: 4, marginBottom: 0, color: '#2e7d32' }}>{t.admin_reply}</p>
-                          </>
-                        )}
-                      </div>
-                    ),
-                  }}
                   locale={{ emptyText: 'No tickets.' }}
                 />
               </Card>
