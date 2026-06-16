@@ -79,3 +79,9 @@ export const adminToggleStore = (code) => api.patch(`/admin/stores/${code}/toggl
 export const adminUpdateStore = (code, data) => api.patch(`/admin/stores/${code}`, data)
 export const adminDailyRevenue = () => api.get('/admin/daily-revenue')
 export const adminRevenueByStore = () => api.get('/admin/revenue-by-store')
+export const adminListTickets = (status) => api.get('/admin/support-tickets', { params: status ? { status } : {} })
+export const adminReplyTicket = (id, data) => api.patch(`/admin/support-tickets/${id}`, data)
+
+// ── Support / Help ────────────────────────────────────────────────────────────
+export const submitSupportTicket = (data) => api.post('/support/', data)
+export const getMyTickets = () => api.get('/support/')

@@ -6,7 +6,7 @@ import {
   UserOutlined, ShopOutlined, BarcodeOutlined, BarChartOutlined,
   TeamOutlined, SettingOutlined, LogoutOutlined, SafetyCertificateOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, MenuOutlined,
-  SunOutlined, MoonOutlined,
+  SunOutlined, MoonOutlined, QuestionCircleOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../store/authStore'
 
@@ -25,6 +25,7 @@ const ROLE_MENUS = {
     { key: '/reports',        icon: <BarChartOutlined />,         label: 'Reports' },
     { key: '/team',           icon: <TeamOutlined />,             label: 'Team' },
     { key: '/settings',       icon: <SettingOutlined />,          label: 'Settings' },
+    { key: '/help',           icon: <QuestionCircleOutlined />,   label: 'Help & Support' },
   ],
   Manager: [
     { key: '/dashboard',      icon: <DashboardOutlined />,        label: 'Dashboard' },
@@ -35,17 +36,20 @@ const ROLE_MENUS = {
     { key: '/barcode-labels', icon: <BarcodeOutlined />,          label: 'Barcode Labels' },
     { key: '/reports',        icon: <BarChartOutlined />,         label: 'Reports' },
     { key: '/team',           icon: <TeamOutlined />,             label: 'Team' },
+    { key: '/help',           icon: <QuestionCircleOutlined />,   label: 'Help & Support' },
   ],
   Cashier: [
     { key: '/dashboard',      icon: <DashboardOutlined />,        label: 'Dashboard' },
     { key: '/new-bill',       icon: <ShoppingCartOutlined />,     label: 'New Bill' },
     { key: '/bill-history',   icon: <FileTextOutlined />,         label: 'Bill History' },
     { key: '/customers',      icon: <UserOutlined />,             label: 'Customers' },
+    { key: '/help',           icon: <QuestionCircleOutlined />,   label: 'Help & Support' },
   ],
   Viewer: [
     { key: '/dashboard',      icon: <DashboardOutlined />,        label: 'Dashboard' },
     { key: '/bill-history',   icon: <FileTextOutlined />,         label: 'Bill History' },
     { key: '/reports',        icon: <BarChartOutlined />,         label: 'Reports' },
+    { key: '/help',           icon: <QuestionCircleOutlined />,   label: 'Help & Support' },
   ],
   SuperAdmin: [
     { key: '/super-admin',    icon: <SafetyCertificateOutlined />, label: 'Super Admin' },
