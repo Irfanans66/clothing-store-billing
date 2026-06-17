@@ -16,8 +16,11 @@ const LABEL_SIZES = [
   { value: '60x40', label: '60×40 mm (Large)' },
   { value: '100x50', label: '100×50 mm (XL)' },
 ]
+const LABEL_DESIGNS = [
+  { value: 'classic', label: 'Design 1 — Classic Blue' },
+  { value: 'modern',  label: 'Design 2 — Modern Price Tag' },
+]
 
-// 203 DPI — standard thermal label printer resolution
 const DPI = 203
 const MM_PER_INCH = 25.4
 
@@ -25,26 +28,43 @@ function mmToPx(mm) {
   return Math.round((mm / MM_PER_INCH) * DPI)
 }
 
-async function drawLabel(product, W_mm, H_mm, storeName) {
+// ── Shared: draw barcode SVG onto canvas ──────────────────────────────────────
+async function drawBarcode(ctx, bc, x, y, w, h) {
+  try {
+    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    JsBarcode(svgEl, bc, { format: 'CODE128', displayValue: false, margin: 0, width: 2, height: h })
+    const svgBlob = new Blob([svgEl.outerHTML], { type: 'image/svg+xml' })
+    const svgUrl = URL.createObjectURL(svgBlob)
+    await new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const bw = Math.min(w, img.naturalWidth || w)
+        ctx.drawImage(img, x + (w - bw) / 2, y, bw, h)
+        URL.revokeObjectURL(svgUrl)
+        resolve()
+      }
+      img.onerror = resolve
+      img.src = svgUrl
+    })
+  } catch { /* skip on error */ }
+}
+
+// ── Design 1: Classic Blue ────────────────────────────────────────────────────
+async function drawLabelClassic(product, W_mm, H_mm, storeName) {
   const W = mmToPx(W_mm)
   const H = mmToPx(H_mm)
-  // For landscape labels (W > H), rotate canvas to portrait so printer won't auto-rotate
   const isLandscape = W > H
   const canvas = document.createElement('canvas')
   canvas.width  = isLandscape ? H : W
   canvas.height = isLandscape ? W : H
   const ctx = canvas.getContext('2d')
-  if (isLandscape) {
-    ctx.translate(0, W)
-    ctx.rotate(-Math.PI / 2)
-  }
+  if (isLandscape) { ctx.translate(0, W); ctx.rotate(-Math.PI / 2) }
 
   const hdrH = Math.round(H * 0.22)
   const ftrH = Math.round(H * 0.22)
   const bodyH = H - hdrH - ftrH
   const pad = Math.round(W * 0.025)
 
-  // White background
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
 
@@ -74,48 +94,21 @@ async function drawLabel(product, W_mm, H_mm, storeName) {
     ctx.font = `${Math.round(bodyH * 0.16)}px Arial`
     ctx.fillText(product.category, W / 2, nameY + nameSize + Math.round(bodyH * 0.01))
   }
-
   const catH = product.category ? Math.round(bodyH * 0.18) : 0
 
-  // Separator line
+  // Separator
   ctx.strokeStyle = '#cccccc'
   ctx.lineWidth = 1
   const sepY = nameY + nameSize + catH + Math.round(bodyH * 0.02)
-  ctx.beginPath()
-  ctx.moveTo(pad * 2, sepY)
-  ctx.lineTo(W - pad * 2, sepY)
-  ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(pad * 2, sepY); ctx.lineTo(W - pad * 2, sepY); ctx.stroke()
 
-  // Barcode SVG → Image → Canvas
+  // Barcode
   const bc = (product.barcode || product.item_id || '').toString()
   const barH = Math.round(bodyH * 0.28)
   const barY = sepY + Math.round(bodyH * 0.03)
+  await drawBarcode(ctx, bc, pad * 2, barY, W - pad * 4, barH)
 
-  try {
-    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-    JsBarcode(svgEl, bc, {
-      format: 'CODE128',
-      displayValue: false,
-      margin: 0,
-      width: 2,
-      height: barH,
-    })
-    const svgBlob = new Blob([svgEl.outerHTML], { type: 'image/svg+xml' })
-    const svgUrl = URL.createObjectURL(svgBlob)
-    await new Promise((resolve) => {
-      const img = new Image()
-      img.onload = () => {
-        const barW = Math.min(W - pad * 4, img.naturalWidth || (W - pad * 4))
-        ctx.drawImage(img, (W - barW) / 2, barY, barW, barH)
-        URL.revokeObjectURL(svgUrl)
-        resolve()
-      }
-      img.onerror = resolve
-      img.src = svgUrl
-    })
-  } catch { /* skip barcode on error */ }
-
-  // Footer — MRP top row, barcode number bottom row (drawn together to prevent overlap)
+  // Footer — MRP + barcode number
   const bcLine = product.item_id ? `${bc}  |  ${product.item_id}` : bc
   ctx.fillStyle = '#f0f0f0'
   ctx.fillRect(0, H - ftrH, W, ftrH)
@@ -138,20 +131,126 @@ async function drawLabel(product, W_mm, H_mm, storeName) {
   return canvas.toDataURL('image/png')
 }
 
-async function printLabels(products, copies, labelSize, storeName) {
+// ── Design 2: Modern Price Tag ────────────────────────────────────────────────
+// Layout (landscape): left accent bar | product info + MRP big | barcode right
+// Layout (portrait):  accent line at top | name | big MRP | barcode | bc number
+async function drawLabelModern(product, W_mm, H_mm, storeName) {
+  const W = mmToPx(W_mm)
+  const H = mmToPx(H_mm)
+  const isLandscape = W > H
+  const canvas = document.createElement('canvas')
+  canvas.width  = isLandscape ? H : W
+  canvas.height = isLandscape ? W : H
+  const ctx = canvas.getContext('2d')
+  if (isLandscape) { ctx.translate(0, W); ctx.rotate(-Math.PI / 2) }
+
+  const pad = Math.round(W * 0.03)
+  const bc  = (product.barcode || product.item_id || '').toString()
+  const bcLine = product.item_id ? `${bc}  |  ${product.item_id}` : bc
+  const mrpText = `Rs. ${Math.round(product.mrp || 0).toLocaleString()}`
+
+  // White background
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, H)
+
+  // Accent bar on left (14% width)
+  const accentW = Math.round(W * 0.14)
+  ctx.fillStyle = '#7C3AED'
+  ctx.fillRect(0, 0, accentW, H)
+
+  // Store name vertical on accent bar
+  const storeNameStr = (storeName || 'STORE').substring(0, 16).toUpperCase()
+  const storeFontSz = Math.round(Math.min(accentW * 0.55, H * 0.09))
+  ctx.save()
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `bold ${storeFontSz}px Arial`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.translate(accentW / 2, H / 2)
+  ctx.rotate(-Math.PI / 2)
+  ctx.fillText(storeNameStr, 0, 0)
+  ctx.restore()
+
+  // Right content area
+  const contentX = accentW + pad
+  const contentW = W - accentW - pad * 2
+
+  // Product name (top)
+  const nameFontSz = Math.round(H * 0.13)
+  ctx.fillStyle = '#1a1a1a'
+  ctx.font = `bold ${nameFontSz}px Arial`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  const nameText = (product.product_name || '').substring(0, 24)
+  ctx.fillText(nameText, contentX, Math.round(H * 0.05))
+
+  // Size / Color / Category  (smaller, gray)
+  const metaFontSz = Math.round(H * 0.09)
+  ctx.fillStyle = '#666666'
+  ctx.font = `${metaFontSz}px Arial`
+  const sizeColor = [product.size, product.color, product.category].filter(Boolean).join(' · ')
+  if (sizeColor) ctx.fillText(sizeColor.substring(0, 30), contentX, Math.round(H * 0.05) + nameFontSz + 2)
+
+  // Divider line
+  const divY = Math.round(H * 0.05) + nameFontSz + metaFontSz + Math.round(H * 0.04)
+  ctx.strokeStyle = '#e0e0e0'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(contentX, divY)
+  ctx.lineTo(W - pad, divY)
+  ctx.stroke()
+
+  // Big MRP
+  const mrpFontSz = Math.round(H * 0.22)
+  ctx.fillStyle = '#7C3AED'
+  ctx.font = `bold ${mrpFontSz}px Arial`
+  ctx.textBaseline = 'top'
+  ctx.fillText(mrpText, contentX, divY + Math.round(H * 0.03))
+
+  // "MRP" label small above the price
+  ctx.fillStyle = '#999999'
+  ctx.font = `${Math.round(H * 0.09)}px Arial`
+  ctx.fillText('MRP', contentX, divY + Math.round(H * 0.03) + mrpFontSz + 1)
+
+  // Barcode (bottom portion)
+  const barY   = Math.round(H * 0.60)
+  const barH   = Math.round(H * 0.25)
+  const barX   = contentX
+  const barW   = contentW
+  await drawBarcode(ctx, bc, barX, barY, barW, barH)
+
+  // Barcode number
+  const bcFontSz = Math.round(H * 0.08)
+  ctx.fillStyle = '#444444'
+  ctx.font = `${bcFontSz}px Arial`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillText(bcLine, contentX + contentW / 2, barY + barH + 2)
+
+  // Outer border
+  ctx.strokeStyle = '#cccccc'
+  ctx.lineWidth = 1
+  ctx.strokeRect(0.5, 0.5, W - 1, H - 1)
+
+  return canvas.toDataURL('image/png')
+}
+
+// ── Print orchestrator ────────────────────────────────────────────────────────
+async function printLabels(products, copies, labelSize, storeName, design) {
   const [wStr, hStr] = labelSize.split('x')
   const W_mm = parseFloat(wStr)
   const H_mm = parseFloat(hStr)
-  // For landscape labels, the canvas is stored as portrait (H_mm × W_mm)
   const isLandscape = W_mm > H_mm
   const pageW = isLandscape ? H_mm : W_mm
   const pageH = isLandscape ? W_mm : H_mm
   const imgW  = isLandscape ? H_mm : W_mm
   const imgH  = isLandscape ? W_mm : H_mm
 
+  const drawFn = design === 'modern' ? drawLabelModern : drawLabelClassic
+
   const pngList = []
   for (const p of products) {
-    const dataUrl = await drawLabel(p, W_mm, H_mm, storeName)
+    const dataUrl = await drawFn(p, W_mm, H_mm, storeName)
     for (let i = 0; i < copies; i++) pngList.push(dataUrl)
   }
 
@@ -184,12 +283,14 @@ async function printLabels(products, copies, labelSize, storeName) {
   setTimeout(() => win.print(), 600)
 }
 
+// ── React component ───────────────────────────────────────────────────────────
 export default function BarcodeLabels() {
   const [products, setProducts]   = useState([])
   const [category, setCategory]   = useState('All')
   const [selected, setSelected]   = useState([])
   const [copies, setCopies]       = useState(2)
   const [labelSize, setLabelSize] = useState('50x25')
+  const [design, setDesign]       = useState('classic')
   const [loading, setLoading]     = useState(false)
   const [printing, setPrinting]   = useState(false)
   const [storeName, setStoreName] = useState('')
@@ -217,7 +318,7 @@ export default function BarcodeLabels() {
     if (!sel.length) return
     setPrinting(true)
     try {
-      await printLabels(sel, copies, labelSize, storeName)
+      await printLabels(sel, copies, labelSize, storeName, design)
     } catch (e) {
       console.error(e)
     } finally {
@@ -246,6 +347,9 @@ export default function BarcodeLabels() {
           </Select>
           <Select value={labelSize} onChange={setLabelSize} style={{ width: 200 }}>
             {LABEL_SIZES.map(s => <Select.Option key={s.value} value={s.value}>{s.label}</Select.Option>)}
+          </Select>
+          <Select value={design} onChange={setDesign} style={{ width: 220 }}>
+            {LABEL_DESIGNS.map(d => <Select.Option key={d.value} value={d.value}>{d.label}</Select.Option>)}
           </Select>
           <Space>
             <Text>Copies:</Text>
