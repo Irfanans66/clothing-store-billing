@@ -19,7 +19,7 @@ const LABEL_SIZES = [
 const LABEL_DESIGNS = [
   { value: 'classic', label: 'Design 1 — Classic Blue' },
   { value: 'modern',  label: 'Design 2 — Modern Price Tag' },
-s  { value: 'bold',    label: 'Design 3 — Bold Price' },
+  { value: 'bold',    label: 'Design 3 — Bold Price' },
 ]
 
 const DPI = 203
