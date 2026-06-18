@@ -77,6 +77,7 @@ export default function NewBill() {
   const [creditAmount, setCreditAmount] = useState(0)
   const [splitPayMode, setSplitPayMode] = useState('Cash')
   const [notes, setNotes]             = useState('')
+  const [upiConfirmed, setUpiConfirmed] = useState(false)
 
   const [billing, setBilling]     = useState(false)
   const [lastBill, setLastBill]   = useState(null)
@@ -814,7 +815,7 @@ export default function NewBill() {
                 {/* Payment Mode */}
                 <Col xs={24} sm={isCredit ? 12 : 8}>
                   <div style={{ marginBottom: 4 }}><Text type="secondary">Payment Mode</Text></div>
-                  <Select value={payMode} onChange={(v) => setPayMode(v)} style={{ width: '100%' }}>
+                  <Select value={payMode} onChange={(v) => { setPayMode(v); setUpiConfirmed(false) }} style={{ width: '100%' }}>
                     {PAYMENT_MODES.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
                   </Select>
                 </Col>
@@ -930,14 +931,67 @@ export default function NewBill() {
                   prefix="📝"
                 />
               </div>
+
+              {/* UPI Payment Confirmation */}
+              {payMode === 'UPI' && storeProfile?.upi_id && (
+                <div style={{
+                  marginTop: 14, borderRadius: 12, overflow: 'hidden',
+                  border: upiConfirmed ? '2px solid #52c41a' : '2px solid #fa8c16',
+                }}>
+                  {!upiConfirmed ? (
+                    <div style={{ padding: '14px 16px', background: '#fff7e6' }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#d46b08', marginBottom: 10 }}>
+                        📱 Ask customer to scan & pay
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                        <div style={{ background: '#fff', padding: 6, borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.15)', flexShrink: 0 }}>
+                          <img
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(`upi://pay?pa=${storeProfile.upi_id}&pn=${encodeURIComponent(storeName)}&am=${grand}&cu=INR`)}&bgcolor=ffffff&color=1A237E`}
+                            alt="UPI QR" width={100} height={100}
+                            style={{ display: 'block', borderRadius: 4 }}
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, color: '#555', marginBottom: 6 }}>
+                            UPI ID: <strong>{storeProfile.upi_id}</strong>
+                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: '#1A237E', marginBottom: 10 }}>
+                            ₹{grand.toLocaleString()}
+                          </div>
+                          <Button
+                            type="primary" size="large"
+                            style={{ background: '#52c41a', borderColor: '#52c41a', fontWeight: 700, fontSize: 15 }}
+                            onClick={() => setUpiConfirmed(true)}
+                          >
+                            ✅ Payment Received
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '12px 16px', background: '#f6ffed', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontWeight: 700, color: '#389e0d', fontSize: 15 }}>
+                        ✅ UPI Payment Confirmed — ₹{grand.toLocaleString()}
+                      </div>
+                      <Button size="small" type="text" danger onClick={() => setUpiConfirmed(false)}>
+                        Undo
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <Divider />
               <Button
                 type="primary" size="large" block
                 loading={billing} onClick={handleGenerateBill}
                 icon={<PrinterOutlined />}
                 style={{ height: 52, fontSize: 16 }}
+                disabled={payMode === 'UPI' && storeProfile?.upi_id && !upiConfirmed}
               >
-                Generate Bill
+                {payMode === 'UPI' && storeProfile?.upi_id && !upiConfirmed
+                  ? '⬆ Confirm UPI Payment First'
+                  : 'Generate Bill'}
               </Button>
             </Card>
           )}
