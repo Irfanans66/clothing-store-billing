@@ -7,13 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'logo-icon.svg', 'apple-touch-icon-180x180.png'],
+      includeAssets: ['favicon.ico', 'logo-icon.svg', 'apple-touch-icon-180x180.png', 'store-bg.jpg'],
       manifest: {
         name: 'Local Billing',
         short_name: 'Local Billing',
         description: 'POS and billing system for clothing stores',
-        theme_color: '#0a0118',
-        background_color: '#0a0118',
+        theme_color: '#0a0500',
+        background_color: '#0a0500',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
@@ -43,7 +43,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,woff2}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

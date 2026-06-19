@@ -47,27 +47,20 @@ export default function Login() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(160deg, #0a0118 0%, #160332 55%, #0d0225 100%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       position: 'relative', overflow: 'hidden',
     }}>
-      {/* Decorative blobs — logo purple & cyan */}
+      {/* Gold ambient glow accents */}
       <div style={{
-        position: 'absolute', top: -100, left: -100,
-        width: 380, height: 380, borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(134,59,255,0.22) 0%, transparent 70%)',
+        position: 'absolute', top: -80, left: -80,
+        width: 400, height: 400, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(201,168,76,0.12) 0%, transparent 70%)',
         pointerEvents: 'none',
       }}/>
       <div style={{
-        position: 'absolute', bottom: -80, right: -80,
-        width: 320, height: 320, borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(71,191,255,0.16) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }}/>
-      <div style={{
-        position: 'absolute', top: '40%', right: -60,
-        width: 220, height: 220, borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(134,59,255,0.12) 0%, transparent 70%)',
+        position: 'absolute', bottom: -60, right: -60,
+        width: 350, height: 350, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(201,168,76,0.08) 0%, transparent 70%)',
         pointerEvents: 'none',
       }}/>
 
@@ -75,13 +68,13 @@ export default function Login() {
         {/* Brand */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <img src="/logo-icon.svg" alt="Local Billing Logo"
-            style={{ width: 88, height: 88, borderRadius: 20, boxShadow: '0 8px 32px rgba(124,58,237,0.5)', marginBottom: 16 }}
+            style={{ width: 88, height: 88, borderRadius: 20, boxShadow: '0 8px 32px rgba(201,168,76,0.45)', marginBottom: 16 }}
           />
           <Title level={2} style={{
             margin: '0 0 6px',
             fontFamily: "'Poppins', sans-serif",
             fontWeight: 800,
-            background: 'linear-gradient(90deg, #ffffff 30%, #a78bfa)',
+            background: 'linear-gradient(90deg, #ffffff 20%, #E8C87A)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
             letterSpacing: '-0.5px',
           }}>
@@ -99,9 +92,11 @@ export default function Login() {
         <Card
           style={{
             borderRadius: 20,
-            boxShadow: '0 16px 48px rgba(0,0,0,0.35), 0 0 0 1px rgba(124,58,237,0.15)',
-            border: 'none',
-            backdropFilter: 'blur(10px)',
+            background: 'rgba(15, 8, 2, 0.72)',
+            backdropFilter: 'blur(28px)',
+            WebkitBackdropFilter: 'blur(28px)',
+            border: '1px solid rgba(201,168,76,0.22)',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,248,235,0.07)',
           }}
           styles={{ body: { padding: '32px 28px' } }}
         >

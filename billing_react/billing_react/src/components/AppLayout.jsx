@@ -1,12 +1,12 @@
 import React, { useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Avatar, Typography, Button, Dropdown, Tag, Space, Drawer, Grid, theme as antTheme, Tooltip } from 'antd'
+import { Layout, Menu, Avatar, Typography, Button, Dropdown, Tag, Space, Drawer, Grid } from 'antd'
 import {
   DashboardOutlined, ShoppingCartOutlined, FileTextOutlined,
   UserOutlined, ShopOutlined, BarcodeOutlined, BarChartOutlined,
   TeamOutlined, SettingOutlined, LogoutOutlined, SafetyCertificateOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, MenuOutlined,
-  SunOutlined, MoonOutlined, QuestionCircleOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../store/authStore'
 
@@ -61,8 +61,8 @@ const ROLE_COLORS = {
   Viewer: 'default', SuperAdmin: 'purple',
 }
 
-const SIDER_GRADIENT = 'linear-gradient(160deg, #0a0118 0%, #160332 55%, #0d0225 100%)'
-const PRIMARY = '#863bff'
+const GOLD = '#C9A84C'
+const GOLD_LIGHT = '#E8C87A'
 
 function NavMenu({ menuItems, selectedKey, onSelect }) {
   return (
@@ -80,21 +80,25 @@ function NavMenu({ menuItems, selectedKey, onSelect }) {
 function BrandHeader({ collapsed, storeName }) {
   return (
     <div style={{
-      padding: collapsed ? '16px 12px' : '16px 20px',
-      borderBottom: '1px solid rgba(255,255,255,0.1)',
-      background: 'rgba(0,0,0,0.15)',
+      padding: collapsed ? '18px 12px' : '18px 20px',
+      borderBottom: '1px solid rgba(201,168,76,0.18)',
+      background: 'rgba(0,0,0,0.2)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
         <img src="/logo-icon.svg" alt="logo"
-          style={{ width: collapsed ? 32 : 36, height: collapsed ? 32 : 36, flexShrink: 0, borderRadius: 8 }}
+          style={{
+            width: collapsed ? 32 : 38, height: collapsed ? 32 : 38,
+            flexShrink: 0, borderRadius: 10,
+            boxShadow: '0 4px 16px rgba(201,168,76,0.35)',
+          }}
         />
         {!collapsed && (
           <div style={{ overflow: 'hidden' }}>
             <div style={{
-              color: '#fff', fontSize: 15, fontWeight: 700,
+              fontSize: 15, fontWeight: 700,
               fontFamily: "'Poppins', sans-serif",
               letterSpacing: '0.3px',
-              background: 'linear-gradient(90deg, #fff 30%, #a78bfa)',
+              background: `linear-gradient(90deg, #fff 20%, ${GOLD_LIGHT})`,
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
               whiteSpace: 'nowrap',
@@ -102,7 +106,7 @@ function BrandHeader({ collapsed, storeName }) {
               Local Billing
             </div>
             {storeName && (
-              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {storeName}
               </Text>
             )}
@@ -116,10 +120,9 @@ function BrandHeader({ collapsed, storeName }) {
 export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { role, storeName, username, logout, darkMode, toggleDarkMode } = useAuthStore()
+  const { role, storeName, username, logout } = useAuthStore()
   const [collapsed, setCollapsed]   = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { token } = antTheme.useToken()
 
   const screens   = useBreakpoint()
   const isMobile  = !screens.md   // < 768px
@@ -144,7 +147,7 @@ export default function AppLayout() {
   return (
     <Layout style={{ minHeight: '100vh' }}>
 
-      {/* Desktop: fixed sidebar */}
+      {/* Desktop: fixed glass sidebar */}
       {!isMobile && (
         <Sider
           collapsible
@@ -153,10 +156,8 @@ export default function AppLayout() {
           trigger={null}
           width={220}
           style={{
-            background: SIDER_GRADIENT,
             position: 'fixed', height: '100vh',
             left: 0, top: 0, overflow: 'auto', zIndex: 100,
-            boxShadow: '4px 0 24px rgba(18,0,41,0.35)',
           }}
         >
           <BrandHeader collapsed={collapsed} storeName={storeName} />
@@ -164,14 +165,14 @@ export default function AppLayout() {
         </Sider>
       )}
 
-      {/* Mobile: Drawer */}
+      {/* Mobile: Glass Drawer */}
       {isMobile && (
         <Drawer
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
           placement="left"
           width={240}
-          bodyStyle={{ padding: 0, background: SIDER_GRADIENT }}
+          bodyStyle={{ padding: 0, background: 'transparent' }}
           headerStyle={{ display: 'none' }}
         >
           <BrandHeader collapsed={false} storeName={storeName} />
@@ -181,11 +182,8 @@ export default function AppLayout() {
 
       <Layout style={{ marginLeft: isMobile ? 0 : (collapsed ? 80 : 220), transition: 'margin-left 0.2s' }}>
         <Header style={{
-          background: token.colorBgContainer,
           padding: isMobile ? '0 12px' : '0 24px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          boxShadow: '0 1px 0 rgba(124,58,237,0.1), 0 2px 12px rgba(124,58,237,0.06)',
-          borderBottom: '1px solid rgba(124,58,237,0.08)',
           position: 'sticky', top: 0, zIndex: 99,
           height: 56,
         }}>
@@ -201,19 +199,16 @@ export default function AppLayout() {
 
           <Space>
             {!isMobile && storeName && (
-              <Text type="secondary" style={{ fontSize: 13 }}>{storeName}</Text>
+              <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{storeName}</Text>
             )}
-            <Tooltip title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
-              <Button
-                type="text"
-                icon={darkMode ? <SunOutlined style={{ fontSize: 17 }} /> : <MoonOutlined style={{ fontSize: 17 }} />}
-                onClick={toggleDarkMode}
-              />
-            </Tooltip>
             <Tag color={ROLE_COLORS[role] || 'default'} style={{ margin: 0 }}>{role}</Tag>
             <Dropdown menu={userMenu} trigger={['click']}>
               <Space style={{ cursor: 'pointer' }}>
-                <Avatar style={{ background: 'linear-gradient(135deg, #863bff, #47bfff)', width: 32, height: 32, lineHeight: '32px', fontWeight: 700 }}>
+                <Avatar style={{
+                  background: `linear-gradient(135deg, ${GOLD}, ${GOLD_LIGHT})`,
+                  width: 32, height: 32, lineHeight: '32px',
+                  fontWeight: 700, color: '#1a0a00',
+                }}>
                   {username?.[0]?.toUpperCase()}
                 </Avatar>
               </Space>

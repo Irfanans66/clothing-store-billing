@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ConfigProvider, theme as antTheme } from 'antd'
 import { useAuthStore } from './store/authStore'
@@ -22,22 +22,22 @@ function PrivateRoute({ children }) {
 }
 
 export default function App() {
-  const darkMode = useAuthStore((s) => s.darkMode)
-
-  useEffect(() => {
-    document.body.style.background = darkMode ? '#141414' : '#f0f2f5'
-  }, [darkMode])
-
   return (
     <ConfigProvider
       theme={{
-        algorithm: darkMode ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
+        algorithm: antTheme.darkAlgorithm,
         token: {
-          colorPrimary:   '#7C3AED',
-          colorLink:      '#7C3AED',
-          fontFamily:     "'Poppins', 'Inter', 'Segoe UI', sans-serif",
-          borderRadius:   10,
-          colorBgLayout:  darkMode ? '#0f0a1e' : '#F5F3FF',
+          colorPrimary:        '#C9A84C',
+          colorLink:           '#C9A84C',
+          fontFamily:          "'Poppins', 'Inter', 'Segoe UI', sans-serif",
+          borderRadius:        12,
+          colorBgLayout:       'transparent',
+          colorBgContainer:    'rgba(18, 10, 3, 0.55)',
+          colorBgElevated:     'rgba(25, 14, 4, 0.80)',
+          colorBorder:         'rgba(201, 168, 76, 0.2)',
+          colorText:           'rgba(255,255,255,0.92)',
+          colorTextSecondary:  'rgba(255,255,255,0.55)',
+          colorTextTertiary:   'rgba(255,255,255,0.38)',
         },
       }}
     >
