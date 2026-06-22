@@ -114,11 +114,14 @@ def _receipt_design1(bill, raw_items, store) -> bytes:
 
     W, pad = 80 * mm, 3.5 * mm
     n = len(raw_items)
+    sname  = store.store_name if store else 'STORE'
     saddr  = (store.address or '') if store else ''
+    upi_id = (store.upi_id or '').strip() if store else ''
     tc_txt = (store.notes or 'NO RETURN, ONLY EXCHANGE WITHIN 7 DAYS WITH BILL.') if store else 'NO RETURN, ONLY EXCHANGE WITHIN 7 DAYS WITH BILL.'
     addr_l = max(1, -(-len(saddr) // 38))
     tc_l   = max(2, -(-len(tc_txt) // 40))
-    H = (60 + addr_l * 4 + n * 14 + 38 + tc_l * 3.5 + 38) * mm
+    qr_h   = 30 if upi_id else 0
+    H = (60 + addr_l * 4 + n * 14 + 38 + tc_l * 3.5 + 38 + qr_h) * mm
 
     buf = io.BytesIO()
     c = rc.Canvas(buf, pagesize=(W, H))
@@ -177,8 +180,8 @@ def _receipt_design1(bill, raw_items, store) -> bytes:
         nm = str(r[4] or '')[:18]; qty, price, total = float(r[8]), float(r[10]), float(r[15])
         c.setFillColorRGB(0, 0, 0); c.setFont('Courier-Bold', 8); c.drawString(_c1, y, str(i))
         c.setFont('Courier', 8); c.drawString(_c2, y, nm)
-        c.drawString(_c3, y, f'{qty:.3f}'); c.drawString(_c4, y, f'{price:.2f}')
-        c.drawRightString(W - pad, y, f'{total:.2f}'); y -= 4 * mm
+        c.drawString(_c3, y, f'{int(qty)}'); c.drawString(_c4, y, f'{price:.1f}')
+        c.drawRightString(W - pad, y, f'{total:.1f}'); y -= 4 * mm
         c.setFont('Courier', 7); c.drawString(_c3, y, 'PCS'); y -= 4 * mm
 
     hline(2)
@@ -224,6 +227,17 @@ def _receipt_design1(bill, raw_items, store) -> bytes:
 
     c.setFillColorRGB(0, 0, 0.7); c.setFont('Courier-BoldOblique', 8)
     c.drawCentredString(W / 2, y, 'Thank You... Visit Again !'); y -= 6 * mm
+
+    if upi_id:
+        try:
+            import qrcode
+            from reportlab.lib.utils import ImageReader
+            qr_img = qrcode.make(f'upi://pay?pa={upi_id}&pn={sname}&am={int(float(bill.grand_total))}&cu=INR&tn=Bill%20{bill.bill_no}')
+            qr_buf = io.BytesIO(); qr_img.save(qr_buf, format='PNG'); qr_buf.seek(0)
+            sz = 25 * mm
+            c.drawImage(ImageReader(qr_buf), (W - sz) / 2, y - sz, sz, sz); y -= sz + 3 * mm
+        except Exception:
+            pass
 
     c.setStrokeColorRGB(0, 0, 0); c.setLineWidth(0.5)
     col_w = W / 2 - pad
