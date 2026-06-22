@@ -118,15 +118,49 @@ export default function Settings() {
             },
             {
               key: 'receipt',
-              label: '🖨️ Receipt Size',
+              label: '🖨️ Receipt Design',
               children: (
-                <div style={{ maxWidth: 480 }}>
+                <div style={{ maxWidth: 560 }}>
                   <Alert
                     type="info" showIcon style={{ marginBottom: 20 }}
-                    message="Thermal Printer Paper Size"
-                    description="Choose the paper roll size your thermal printer uses. This setting is saved on this device and applies to all printed receipts."
+                    message="Receipt Design & Paper Size"
+                    description="Choose a receipt design style. Designs 1–4 are full-featured invoice layouts. Thermal options are for narrow thermal roll printers."
                   />
-                  <div style={{ marginBottom: 12, fontWeight: 600 }}>Paper Width</div>
+
+                  <div style={{ marginBottom: 10, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+                    📄 Invoice Designs (80mm / A4-friendly)
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+                    {[
+                      { value: 'design1', label: 'Design 1', desc: 'Sales Invoice', detail: 'Bordered box · Red store name · Blue header · YOU SAVED · Barcode + Points' },
+                      { value: 'design2', label: 'Design 2', desc: 'Dark Header', detail: 'Black header · Per-item discount · MRP total · Payment details table' },
+                      { value: 'design3', label: 'Design 3', desc: 'Bill + Logo', detail: 'BILL bar · Logo placeholder · Red item header · Totals box · Footer bar' },
+                      { value: 'design4', label: 'Design 4', desc: 'Tax Invoice', detail: 'Large blue store name · GST breakdown table · Large total · Minimal clean' },
+                    ].map(({ value, label, desc, detail }) => (
+                      <div
+                        key={value}
+                        onClick={() => { setPaperSize(value); localStorage.setItem('receipt_paper_size', value); message.success(`${desc} selected!`) }}
+                        style={{
+                          width: 'calc(50% - 5px)',
+                          border: `2px solid ${paperSize === value ? '#C9A84C' : 'rgba(255,255,255,0.15)'}`,
+                          borderRadius: 10,
+                          padding: '12px 14px',
+                          cursor: 'pointer',
+                          background: paperSize === value ? 'rgba(201,168,76,0.12)' : 'rgba(255,255,255,0.04)',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: 13, color: paperSize === value ? '#C9A84C' : 'rgba(255,255,255,0.85)', marginBottom: 2 }}>
+                          {label} — {desc}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.4 }}>{detail}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ marginBottom: 10, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+                    🧾 Thermal Roll (narrow paper)
+                  </div>
                   <Radio.Group
                     value={paperSize}
                     onChange={(e) => {
@@ -135,20 +169,19 @@ export default function Settings() {
                       message.success('Receipt size updated!')
                     }}
                   >
-                    <Radio.Button value="2inch" style={{ marginRight: 8 }}>
-                      2-inch (58mm)
-                    </Radio.Button>
-                    <Radio.Button value="3inch" style={{ marginRight: 8 }}>
-                      3-inch Standard
-                    </Radio.Button>
-                    <Radio.Button value="3inch-bold">
-                      3-inch Bold
-                    </Radio.Button>
+                    <Radio.Button value="2inch" style={{ marginRight: 8 }}>2-inch (58mm)</Radio.Button>
+                    <Radio.Button value="3inch" style={{ marginRight: 8 }}>3-inch Standard</Radio.Button>
+                    <Radio.Button value="3inch-bold">3-inch Bold</Radio.Button>
                   </Radio.Group>
-                  <div style={{ marginTop: 16, color: '#888', fontSize: 12 }}>
-                    {paperSize === '2inch' && 'Using 2-inch (58mm) paper — compact receipt with UPI QR.'}
-                    {paperSize === '3inch' && 'Using 3-inch (80mm) standard receipt.'}
-                    {paperSize === '3inch-bold' && 'Using 3-inch (80mm) bold receipt — large fonts, thick lines, easy to read.'}
+
+                  <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(201,168,76,0.08)', borderRadius: 8, border: '1px solid rgba(201,168,76,0.2)', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+                    {paperSize === '2inch' && '2-inch (58mm) paper — compact thermal receipt with UPI QR.'}
+                    {paperSize === '3inch' && '3-inch (80mm) standard thermal receipt.'}
+                    {paperSize === '3inch-bold' && '3-inch (80mm) bold receipt — large fonts, thick lines.'}
+                    {paperSize === 'design1' && 'Sales Invoice — bordered layout with red store name, item table, barcode and loyalty points.'}
+                    {paperSize === 'design2' && 'Dark Header — black header with per-item discount rows and full payment summary.'}
+                    {paperSize === 'design3' && 'Bill + Logo — logo placeholder, colored table header, totals box and black footer bar.'}
+                    {paperSize === 'design4' && 'Tax Invoice — large blue store name, GST breakdown table, clean minimal layout.'}
                   </div>
                 </div>
               ),
