@@ -1,4 +1,5 @@
 # Stage 1: Build React frontend
+# Build context: billing_react/ directory
 FROM node:20-alpine AS react-build
 WORKDIR /app
 COPY billing_react/package*.json ./

@@ -117,6 +117,12 @@ app.include_router(admin.router,      prefix=PREFIX)
 app.include_router(support.router,    prefix=PREFIX)
 
 
+# ── Version ───────────────────────────────────────────────────────────────────
+@app.get("/api/version", include_in_schema=False)
+def version():
+    return {"version": "receipt-designs-v1", "designs": ["design1","design2","design3","design4"]}
+
+
 # ── APK Download ─────────────────────────────────────────────────────────────
 _STATIC = os.path.join(os.path.dirname(__file__), "static")
 
