@@ -17,10 +17,10 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY billing_backend/requirements.txt .
+COPY billing_react/billing_backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY billing_backend/ .
+COPY billing_react/billing_backend/ .
 
 # Copy built React into backend dist folder
 COPY --from=react-build /app/dist ./dist
