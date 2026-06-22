@@ -2,21 +2,19 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Card, Table, Input, Select, Button, Space, Tag, Typography,
-  Modal, Descriptions, Divider, message, InputNumber, Form, Alert, AutoComplete, Spin,
+  Modal, Descriptions, Divider, message, InputNumber, Form, Alert, AutoComplete, Spin, Grid,
 } from 'antd'
-import { SearchOutlined, PrinterOutlined, RollbackOutlined } from '@ant-design/icons'
+import { SearchOutlined, PrinterOutlined, RollbackOutlined, FileTextOutlined } from '@ant-design/icons'
 import { getBills, getBill, returnBillItems, getCustomers } from '../api/client'
 import { printPdfWithAuth } from '../utils/pdf'
 
 const { Title, Text } = Typography
+const { useBreakpoint } = Grid
 const PAYMENT_MODES = ['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Net Banking']
 
 const STATUS_COLORS = {
-  Paid: 'green',
-  Credit: 'orange',
-  Void: 'red',
-  Returned: 'purple',
-  'Partial Return': 'geekblue',
+  Paid: 'green', Credit: 'orange', Void: 'red',
+  Returned: 'purple', 'Partial Return': 'geekblue',
 }
 
 export default function BillHistory() {
@@ -28,6 +26,8 @@ export default function BillHistory() {
     customer: searchParams.get('customer') || '',
     payment_mode: '',
   })
+  const screens  = useBreakpoint()
+  const isMobile = !screens.md
   const [custOptions, setCustOptions] = useState([])
   const [custLoading, setCustLoading] = useState(false)
   const custDebounceRef = useRef(null)
@@ -206,52 +206,148 @@ export default function BillHistory() {
 
   return (
     <div>
-      <Title level={3} style={{ marginBottom: 16 }}>Bill History</Title>
+      <Title level={isMobile ? 4 : 3} style={{ marginBottom: 12 }}>📋 Bill History</Title>
 
-      <Card style={{ borderRadius: 12, marginBottom: 16 }}>
-        <Space wrap>
-          <Input
-            placeholder="Filter by date (YYYY-MM-DD)"
-            value={filters.date}
-            onChange={(e) => setFilters({ ...filters, date: e.target.value })}
-            prefix={<SearchOutlined />} style={{ width: 200 }}
+      {/* Filters */}
+      <Card style={{ borderRadius: 12, marginBottom: 12 }}>
+        {isMobile ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Input
+              placeholder="Date (YYYY-MM-DD)"
+              value={filters.date}
+              onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+              prefix={<SearchOutlined />}
+            />
+            <AutoComplete
+              value={filters.customer}
+              options={custOptions}
+              onSearch={onCustInput}
+              onChange={onCustInput}
+              onSelect={(val) => { setFilters(f => ({ ...f, customer: val })); setCustOptions([]) }}
+              allowClear
+              onClear={() => { setFilters(f => ({ ...f, customer: '' })); setCustOptions([]) }}
+              notFoundContent={custLoading ? <Spin size="small" /> : null}
+              placeholder="Search customer..."
+            >
+              <Input prefix={<SearchOutlined />} suffix={custLoading ? <Spin size="small" /> : null} />
+            </AutoComplete>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Select
+                placeholder="Payment" value={filters.payment_mode || undefined}
+                onChange={(v) => setFilters({ ...filters, payment_mode: v })}
+                allowClear style={{ flex: 1 }}
+              >
+                {PAYMENT_MODES.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
+              </Select>
+              <Button type="primary" onClick={load} icon={<SearchOutlined />}>Search</Button>
+            </div>
+          </div>
+        ) : (
+          <Space wrap>
+            <Input
+              placeholder="Filter by date (YYYY-MM-DD)"
+              value={filters.date}
+              onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+              prefix={<SearchOutlined />} style={{ width: 200 }}
+            />
+            <AutoComplete
+              style={{ width: 200 }}
+              value={filters.customer}
+              options={custOptions}
+              onSearch={onCustInput}
+              onChange={onCustInput}
+              onSelect={(val) => { setFilters(f => ({ ...f, customer: val })); setCustOptions([]) }}
+              allowClear
+              onClear={() => { setFilters(f => ({ ...f, customer: '' })); setCustOptions([]) }}
+              notFoundContent={custLoading ? <Spin size="small" /> : null}
+              placeholder="Search customer..."
+            >
+              <Input prefix={<SearchOutlined />} suffix={custLoading ? <Spin size="small" /> : null} />
+            </AutoComplete>
+            <Select
+              placeholder="Payment Mode" value={filters.payment_mode || undefined}
+              onChange={(v) => setFilters({ ...filters, payment_mode: v })}
+              allowClear style={{ width: 160 }}
+            >
+              {PAYMENT_MODES.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
+            </Select>
+            <Button type="primary" onClick={load} icon={<SearchOutlined />}>Search</Button>
+          </Space>
+        )}
+      </Card>
+
+      <Text type="secondary" style={{ marginBottom: 10, display: 'block', fontSize: 12 }}>
+        {bills.length} record(s) found
+      </Text>
+
+      {/* Mobile: card list | Desktop: table */}
+      {isMobile ? (
+        loading ? (
+          <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+        ) : bills.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 48, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
+            No bills found
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {bills.map((bill) => (
+              <div
+                key={bill.bill_no}
+                onClick={() => viewDetail(bill.bill_no)}
+                style={{
+                  background: 'rgba(18,10,3,0.6)',
+                  backdropFilter: 'blur(14px)',
+                  border: '1px solid rgba(201,168,76,0.18)',
+                  borderRadius: 14,
+                  padding: '14px 16px',
+                  cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                {/* Row 1: Bill no + status */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, color: '#C9A84C', fontSize: 14 }}>#{bill.bill_no}</span>
+                  <Tag color={STATUS_COLORS[bill.status] || 'default'} style={{ margin: 0 }}>{bill.status}</Tag>
+                </div>
+                {/* Row 2: Customer + date */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
+                    {bill.customer_name}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{bill.bill_date}</span>
+                </div>
+                {/* Row 3: Amount + payment + PDF */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>
+                      ₹{Math.round(bill.grand_total).toLocaleString()}
+                    </span>
+                    <Tag color="blue" style={{ marginLeft: 8, fontSize: 11 }}>{bill.payment_mode}</Tag>
+                  </div>
+                  <Button
+                    size="small" icon={<PrinterOutlined />}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const paper = localStorage.getItem('receipt_paper_size') || '3inch'
+                      printPdfWithAuth(`/bills/${bill.bill_no}/receipt-pdf?paper=${paper}`)
+                        .catch(err => message.error('PDF failed: ' + err.message))
+                    }}
+                  >PDF</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+        <Card style={{ borderRadius: 12 }}>
+          <Table
+            dataSource={bills} columns={columns} rowKey="bill_no"
+            loading={loading} size="middle"
+            pagination={{ pageSize: 20, showSizeChanger: true }}
+            scroll={{ x: 700 }}
           />
-          <AutoComplete
-            style={{ width: 200 }}
-            value={filters.customer}
-            options={custOptions}
-            onSearch={onCustInput}
-            onChange={onCustInput}
-            onSelect={(val) => { setFilters(f => ({ ...f, customer: val })); setCustOptions([]) }}
-            allowClear
-            onClear={() => { setFilters(f => ({ ...f, customer: '' })); setCustOptions([]) }}
-            notFoundContent={custLoading ? <Spin size="small" /> : null}
-            placeholder="Search customer..."
-          >
-            <Input prefix={<SearchOutlined />} suffix={custLoading ? <Spin size="small" /> : null} />
-          </AutoComplete>
-          <Select
-            placeholder="Payment Mode" value={filters.payment_mode || undefined}
-            onChange={(v) => setFilters({ ...filters, payment_mode: v })}
-            allowClear style={{ width: 160 }}
-          >
-            {PAYMENT_MODES.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
-          </Select>
-          <Button type="primary" onClick={load} icon={<SearchOutlined />}>Search</Button>
-        </Space>
-      </Card>
-
-      <Card style={{ borderRadius: 12 }}>
-        <Text type="secondary" style={{ marginBottom: 12, display: 'block' }}>
-          {bills.length} record(s) found
-        </Text>
-        <Table
-          dataSource={bills} columns={columns} rowKey="bill_no"
-          loading={loading} size="middle"
-          pagination={{ pageSize: 20, showSizeChanger: true }}
-          scroll={{ x: 700 }}
-        />
-      </Card>
+        </Card>
+      )}
 
       {/* ── Bill Detail Modal ─────────────────────────────────────── */}
       <Modal

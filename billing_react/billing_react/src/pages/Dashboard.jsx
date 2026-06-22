@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { Row, Col, Card, Statistic, Table, Typography, Alert, Radio, Spin } from 'antd'
+import { Row, Col, Card, Statistic, Table, Typography, Alert, Radio, Spin, Grid } from 'antd'
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
+  BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import {
@@ -11,6 +11,7 @@ import {
 import { useAuthStore } from '../store/authStore'
 
 const { Title, Text } = Typography
+const { useBreakpoint } = Grid
 
 const KPI_COLORS = ['#1A237E', '#2E7D32', '#6A1B9A', '#E65100', '#C62828']
 const KPI_KEYS = [
@@ -44,6 +45,8 @@ export default function Dashboard() {
   const [byCategory, setByCategory] = useState([])
   const [byPayment, setByPayment] = useState([])
   const [lowStock, setLowStock]   = useState([])
+  const screens  = useBreakpoint()
+  const isMobile = !screens.md
 
   useEffect(() => {
     getDashboard().then(setStats).catch(() => {})
@@ -82,34 +85,39 @@ export default function Dashboard() {
     { title: 'Min', dataIndex: 'min_stock', key: 'min_stock', width: 60 },
   ]
 
+  const chartH = isMobile ? 180 : 220
+
   return (
     <div>
-      <Title level={3} style={{ marginBottom: 20 }}>🏠 {storeName} — Dashboard</Title>
+      <Title level={isMobile ? 4 : 3} style={{ marginBottom: isMobile ? 12 : 20 }}>
+        🏠 {isMobile ? storeName : `${storeName} — Dashboard`}
+      </Title>
 
-      {/* Overall KPI Cards */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+      {/* KPI Cards — 2 per row on mobile */}
+      <Row gutter={[10, 10]} style={{ marginBottom: isMobile ? 12 : 20 }}>
         {KPI_KEYS.map(([key, label, fmt], i) => (
-          <Col xs={24} sm={12} md={8} lg={4} key={key}>
+          <Col xs={12} sm={12} md={8} lg={4} key={key}>
             <Card
-              style={{ borderLeft: `4px solid ${KPI_COLORS[i]}`, borderRadius: 12 }}
-              styles={{ body: { padding: '16px 20px' } }}
+              style={{ borderLeft: `3px solid ${KPI_COLORS[i]}`, borderRadius: 12 }}
+              styles={{ body: { padding: isMobile ? '10px 12px' : '16px 20px' } }}
             >
               <Statistic
-                title={<span style={{ fontSize: 13 }}>{label}</span>}
+                title={<span style={{ fontSize: isMobile ? 11 : 13 }}>{label}</span>}
                 value={fmt(stats[key] ?? 0)}
-                valueStyle={{ color: KPI_COLORS[i], fontSize: 22, fontWeight: 700 }}
+                valueStyle={{ color: KPI_COLORS[i], fontSize: isMobile ? 18 : 22, fontWeight: 700 }}
               />
             </Card>
           </Col>
         ))}
       </Row>
 
-      {/* Sales Chart with Period Filter */}
+      {/* Sales Chart */}
       <Card
-        style={{ borderRadius: 12, marginBottom: 16 }}
+        style={{ borderRadius: 12, marginBottom: 12 }}
+        styles={{ header: { padding: isMobile ? '0 12px' : undefined } }}
         title={
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-            <span>{PERIOD_TITLES[period]}</span>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 8 }}>
+            <span style={{ fontSize: isMobile ? 13 : 15 }}>{PERIOD_TITLES[period]}</span>
             <Radio.Group
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
@@ -122,85 +130,83 @@ export default function Dashboard() {
           </div>
         }
       >
-        {/* Period summary row */}
-        <Row gutter={12} style={{ marginBottom: 16 }}>
+        <Row gutter={10} style={{ marginBottom: 12 }}>
           <Col xs={12}>
-            <Card size="small" style={{ borderRadius: 8, background: '#f0f4ff', border: 'none', textAlign: 'center' }}>
-              <Statistic
-                title={<Text style={{ fontSize: 12 }}>Revenue</Text>}
-                value={`₹${Math.round(periodRevenue).toLocaleString()}`}
-                valueStyle={{ fontSize: 20, color: '#1A237E', fontWeight: 700 }}
-              />
-            </Card>
+            <div style={{ borderRadius: 8, background: 'rgba(26,35,126,0.15)', border: '1px solid rgba(57,73,171,0.25)', padding: '8px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', marginBottom: 2 }}>Revenue</div>
+              <div style={{ fontWeight: 700, fontSize: isMobile ? 17 : 20, color: '#6fa8ff' }}>
+                ₹{Math.round(periodRevenue).toLocaleString()}
+              </div>
+            </div>
           </Col>
           <Col xs={12}>
-            <Card size="small" style={{ borderRadius: 8, background: '#f0fff4', border: 'none', textAlign: 'center' }}>
-              <Statistic
-                title={<Text style={{ fontSize: 12 }}>Bills</Text>}
-                value={periodBills}
-                valueStyle={{ fontSize: 20, color: '#2E7D32', fontWeight: 700 }}
-              />
-            </Card>
+            <div style={{ borderRadius: 8, background: 'rgba(46,125,50,0.15)', border: '1px solid rgba(67,160,71,0.25)', padding: '8px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', marginBottom: 2 }}>Bills</div>
+              <div style={{ fontWeight: 700, fontSize: isMobile ? 17 : 20, color: '#81c784' }}>
+                {periodBills}
+              </div>
+            </div>
           </Col>
         </Row>
 
-        {/* Chart */}
         {salesLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
         ) : salesData.length ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={salesData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }}
+          <ResponsiveContainer width="100%" height={chartH}>
+            <BarChart data={salesData} margin={{ left: isMobile ? -20 : 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+              <XAxis dataKey="date" tick={{ fontSize: 9 }}
                 tickFormatter={v => period === 'year' ? v.slice(0, 7) : v.slice(5)} />
-              <YAxis tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 9 }} width={isMobile ? 40 : 60} />
               <Tooltip
+                contentStyle={{ background: 'rgba(10,5,2,0.9)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 8 }}
                 formatter={(v, name) => [
                   name === 'revenue' ? `₹${Number(v).toLocaleString()}` : v,
                   name === 'revenue' ? 'Revenue' : 'Bills',
                 ]}
                 labelFormatter={(l) => `Date: ${l}`}
               />
-              <Bar dataKey="revenue" fill="#1A237E" radius={[4, 4, 0, 0]} name="revenue" />
-              <Bar dataKey="bills" fill="#43A047" radius={[4, 4, 0, 0]} name="bills" />
+              <Bar dataKey="revenue" fill="#3949AB" radius={[3, 3, 0, 0]} name="revenue" />
+              <Bar dataKey="bills"   fill="#43A047" radius={[3, 3, 0, 0]} name="bills" />
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <p style={{ color: '#aaa', textAlign: 'center', padding: 40 }}>No sales data for this period</p>
+          <p style={{ color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: 32, fontSize: 13 }}>
+            No sales data for this period
+          </p>
         )}
       </Card>
 
-      {/* Charts Row 2 */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+      {/* Category + Payment charts */}
+      <Row gutter={[10, 10]} style={{ marginBottom: 12 }}>
         <Col xs={24} md={12}>
-          <Card title="🛍️ Sales by Category" style={{ borderRadius: 12 }}>
+          <Card title="🛍️ By Category" style={{ borderRadius: 12 }} styles={{ header: { padding: '0 12px', minHeight: 42 } }}>
             {byCategory.length ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={byCategory}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="category" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v) => `₹${Number(v).toLocaleString()}`} />
-                  <Bar dataKey="revenue" fill="#3949AB" radius={[4, 4, 0, 0]} />
+              <ResponsiveContainer width="100%" height={chartH}>
+                <BarChart data={byCategory} margin={{ left: isMobile ? -20 : 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                  <XAxis dataKey="category" tick={{ fontSize: 9 }} />
+                  <YAxis tick={{ fontSize: 9 }} width={isMobile ? 40 : 60} />
+                  <Tooltip contentStyle={{ background: 'rgba(10,5,2,0.9)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 8 }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                  <Bar dataKey="revenue" fill="#3949AB" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <p style={{ color: '#aaa', textAlign: 'center', padding: 40 }}>No data yet</p>}
+            ) : <p style={{ color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: 32, fontSize: 13 }}>No data yet</p>}
           </Card>
         </Col>
-
         <Col xs={24} md={12}>
-          <Card title="💳 Revenue by Payment Mode" style={{ borderRadius: 12 }}>
+          <Card title="💳 By Payment Mode" style={{ borderRadius: 12 }} styles={{ header: { padding: '0 12px', minHeight: 42 } }}>
             {byPayment.length ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={byPayment}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="payment_mode" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v) => `₹${Number(v).toLocaleString()}`} />
-                  <Bar dataKey="revenue" fill="#00897B" radius={[4, 4, 0, 0]} />
+              <ResponsiveContainer width="100%" height={chartH}>
+                <BarChart data={byPayment} margin={{ left: isMobile ? -20 : 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                  <XAxis dataKey="payment_mode" tick={{ fontSize: 9 }} />
+                  <YAxis tick={{ fontSize: 9 }} width={isMobile ? 40 : 60} />
+                  <Tooltip contentStyle={{ background: 'rgba(10,5,2,0.9)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 8 }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                  <Bar dataKey="revenue" fill="#00897B" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <p style={{ color: '#aaa', textAlign: 'center', padding: 40 }}>No data yet</p>}
+            ) : <p style={{ color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: 32, fontSize: 13 }}>No data yet</p>}
           </Card>
         </Col>
       </Row>
@@ -211,7 +217,7 @@ export default function Dashboard() {
           <Table
             dataSource={lowStock} columns={lowStockCols}
             rowKey="item_id" size="small" pagination={false}
-            scroll={{ y: 180 }}
+            scroll={{ x: 400, y: 200 }}
           />
         ) : (
           <Alert message="All products well stocked ✅" type="success" showIcon />

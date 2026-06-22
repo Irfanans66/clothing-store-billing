@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.localbilling.app",
+    "sha256_cert_fingerprints": [
+      "B9:CB:E5:C3:77:73:13:EE:82:9C:F6:AE:D1:7F:B0:20:03:45:D0:C6:2F:AC:1D:65:D8:F0:C3:CB:A2:83:E2:F7"
+    ]
+  }
+}]

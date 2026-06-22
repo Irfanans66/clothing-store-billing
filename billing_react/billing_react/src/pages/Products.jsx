@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Input, Button, Space, Tag, Typography, Modal, Form, Row, Col, Select, InputNumber, message, Switch } from 'antd'
-import { SearchOutlined, PlusOutlined } from '@ant-design/icons'
+import { Card, Table, Input, Button, Space, Tag, Typography, Modal, Form, Row, Col, Select, InputNumber, message, Switch, Grid } from 'antd'
+import { SearchOutlined, PlusOutlined, BarcodeOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import { getProducts, createProduct, updateProduct, adjustStock } from '../api/client'
+
+const { useBreakpoint } = Grid
 
 const { Title, Text } = Typography
 const SIZE_OPTIONS = ['XS','S','M','L','XL','XXL','XXXL','28','30','32','34','36','38','40','2Y','4Y','6Y','8Y','10Y','12Y','Free Size']
@@ -18,6 +21,9 @@ export default function Products() {
   const [stockModal, setStockModal] = useState(null)
   const [stockDelta, setStockDelta] = useState(0)
   const [form] = Form.useForm()
+  const navigate = useNavigate()
+  const screens = useBreakpoint()
+  const isMobile = !screens.md
 
   async function load() {
     setLoading(true)
@@ -72,7 +78,18 @@ export default function Products() {
 
   return (
     <div>
-      <Title level={3} style={{ marginBottom: 16 }}>👔 Products</Title>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <Title level={3} style={{ margin: 0 }}>👔 Products</Title>
+        {isMobile && (
+          <Button
+            icon={<BarcodeOutlined />}
+            onClick={() => navigate('/barcode-labels')}
+            style={{ borderRadius: 10, fontWeight: 600 }}
+          >
+            Barcodes
+          </Button>
+        )}
+      </div>
       <Card style={{ borderRadius: 12 }}>
         <Space wrap style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
           <Space wrap>

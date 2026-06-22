@@ -5,7 +5,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.core.config import get_settings
 from app.core.database import engine, Base, SessionLocal
@@ -116,6 +116,32 @@ app.include_router(store_users.router, prefix=PREFIX)
 app.include_router(admin.router,      prefix=PREFIX)
 app.include_router(support.router,    prefix=PREFIX)
 
+
+# ── APK Download ─────────────────────────────────────────────────────────────
+_STATIC = os.path.join(os.path.dirname(__file__), "static")
+
+@app.get("/download/app", include_in_schema=False)
+def download_apk():
+    apk_path = os.path.join(_STATIC, "LocalBilling.apk")
+    return FileResponse(
+        apk_path,
+        media_type="application/vnd.android.package-archive",
+        filename="LocalBilling.apk"
+    )
+
+# ── Digital Asset Links (required for TWA / Play Store) ──────────────────────
+@app.get("/.well-known/assetlinks.json", include_in_schema=False)
+def assetlinks():
+    return JSONResponse([{
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.localbilling.app",
+            "sha256_cert_fingerprints": [
+                "B9:CB:E5:C3:77:73:13:EE:82:9C:F6:AE:D1:7F:B0:20:03:45:D0:C6:2F:AC:1D:65:D8:F0:C3:CB:A2:83:E2:F7"
+            ]
+        }
+    }])
 
 # ── Serve React frontend ──────────────────────────────────────────────────────
 _DIST = os.path.join(os.path.dirname(__file__), "dist")
