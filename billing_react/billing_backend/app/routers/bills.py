@@ -236,9 +236,8 @@ def _receipt_design1(bill, raw_items, store) -> bytes:
             qr_buf = io.BytesIO(); qr_img.save(qr_buf, format='PNG'); qr_buf.seek(0)
             sz = 25 * mm
             c.drawImage(ImageReader(qr_buf), (W - sz) / 2, y - sz, sz, sz); y -= sz + 3 * mm
-        except Exception as _qr_err:
-            import sys
-            print(f"[design1 QR error] {_qr_err}", file=sys.stderr, flush=True)
+        except Exception:
+            pass
 
     c.setStrokeColorRGB(0, 0, 0); c.setLineWidth(0.5)
     col_w = W / 2 - pad
