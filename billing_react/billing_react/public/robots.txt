@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /bills
+Disallow: /customers
+Disallow: /products
+Disallow: /reports
+Disallow: /settings
+Disallow: /team
+Disallow: /barcode-labels
+Disallow: /superadmin
+
+Sitemap: https://www.loacalbilling.com/sitemap.xml
