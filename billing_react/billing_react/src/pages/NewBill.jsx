@@ -14,6 +14,7 @@ import {
   createBill, getStoreProfile, getPublicReceiptUrl,
 } from '../api/client'
 import { useAuthStore } from '../store/authStore'
+import { useOfflineStore } from '../store/offlineStore'
 import { printPdfWithAuth } from '../utils/pdf'
 
 const { Title, Text } = Typography
@@ -47,6 +48,7 @@ function buildWhatsAppMsg(bill, storeName, storeProfile, receiptUrl) {
 
 export default function NewBill() {
   const { storeName } = useAuthStore()
+  const { isOnline, cachedProducts, cachedCustomers, cacheProducts, cacheCustomers, addPendingBill } = useOfflineStore()
   const screens = useBreakpoint()
   const isMobile = !screens.md
 
@@ -87,22 +89,40 @@ export default function NewBill() {
 
   useEffect(() => {
     getStoreProfile().then(setStoreProfile).catch(() => {})
+    // Pre-load products and customers into offline cache
+    if (isOnline) {
+      getProducts({ limit: 200 }).then((list) => { if (list?.length) cacheProducts(list) }).catch(() => {})
+      getCustomers({ limit: 200 }).then((list) => { if (list?.length) cacheCustomers(list) }).catch(() => {})
+    }
   }, [])
 
   // ── Customer Search ────────────────────────────────────────────────────────
   const searchCustomer = useCallback(async (val) => {
-    const q = (val ?? custSearch).trim()
+    const q = (val ?? custSearch).trim().toLowerCase()
     if (!q) { setCustResults([]); return }
     setCustLoading(true)
     try {
+      if (!isOnline) {
+        const results = cachedCustomers.filter((c) =>
+          c.name?.toLowerCase().includes(q) || c.phone?.includes(q)
+        )
+        setCustResults(results)
+        return
+      }
       const res = await getCustomers({ search: q })
-      setCustResults(res || [])
+      const list = res || []
+      setCustResults(list)
+      if (list.length) cacheCustomers(list)
     } catch {
-      message.error('Customer search failed')
+      // fallback to cache on network error
+      const results = cachedCustomers.filter((c) =>
+        c.name?.toLowerCase().includes(q) || c.phone?.includes(q)
+      )
+      setCustResults(results)
     } finally {
       setCustLoading(false)
     }
-  }, [custSearch])
+  }, [custSearch, isOnline, cachedCustomers, cacheCustomers])
 
   // debounce ref
   const custDebounceRef = useRef(null)
@@ -169,19 +189,34 @@ export default function NewBill() {
     if (!val) return
     setAddingItem(true)
     try {
+      if (!isOnline) {
+        const q = val.toLowerCase()
+        const hits = cachedProducts.filter((p) =>
+          p.item_id?.toLowerCase() === q ||
+          p.product_name?.toLowerCase().includes(q)
+        )
+        if (!hits.length) {
+          setCustomName(val); setCustomModal(true)
+          customForm.setFieldsValue({ product_name: val, gst_pct: 5, size })
+          setItemId(''); return
+        }
+        if (hits.length === 1) { pushToCart(hits[0]); return }
+        setSearchHits(hits); return
+      }
+
       const exact = await getProduct(val.toUpperCase()).catch(() =>
         val !== val.toUpperCase() ? getProduct(val).catch(() => null) : null
       )
       if (exact) { pushToCart(exact); return }
 
       const hits = await getProducts({ search: val })
+      if (hits?.length) cacheProducts([...cachedProducts, ...hits].filter(
+        (p, i, arr) => arr.findIndex((x) => x.item_id === p.item_id) === i
+      ))
       if (!hits?.length) {
-        // Offer custom item
-        setCustomName(val)
-        setCustomModal(true)
+        setCustomName(val); setCustomModal(true)
         customForm.setFieldsValue({ product_name: val, gst_pct: 5, size })
-        setItemId('')
-        return
+        setItemId(''); return
       }
       if (hits.length === 1) { pushToCart(hits[0]); return }
       setSearchHits(hits)
@@ -257,6 +292,16 @@ export default function NewBill() {
         amount_paid: isCredit ? upfront : amountPaid,
         notes,
       }
+
+      if (!isOnline) {
+        addPendingBill(payload)
+        setCart([]); setCustomer(null); setWalkIn(false)
+        setCustSearch(''); setCustResults([])
+        setDiscVal(0); setNotes(''); setCreditAmount(0)
+        message.success('Bill saved offline! Will sync when internet returns.')
+        return
+      }
+
       const res = await createBill(payload)
       setLastBill(res)
       setCart([]); setCustomer(null); setWalkIn(false)

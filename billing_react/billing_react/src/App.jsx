@@ -1,8 +1,10 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ConfigProvider, theme as antTheme } from 'antd'
 import { useAuthStore } from './store/authStore'
+import { useOfflineStore } from './store/offlineStore'
 import AppLayout from './components/AppLayout'
+import OfflineBanner from './components/OfflineBanner'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import NewBill from './pages/NewBill'
@@ -22,6 +24,16 @@ function PrivateRoute({ children }) {
 }
 
 export default function App() {
+  const setOnline = useOfflineStore((s) => s.setOnline)
+
+  useEffect(() => {
+    const on  = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online',  on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [setOnline])
+
   return (
     <ConfigProvider
       theme={{
@@ -48,6 +60,7 @@ export default function App() {
             path="/"
             element={
               <PrivateRoute>
+                <OfflineBanner />
                 <AppLayout />
               </PrivateRoute>
             }
