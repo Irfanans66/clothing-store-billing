@@ -4,7 +4,6 @@ import { ConfigProvider, theme as antTheme } from 'antd'
 import { useAuthStore } from './store/authStore'
 import { useOfflineStore } from './store/offlineStore'
 import AppLayout from './components/AppLayout'
-import OfflineBanner from './components/OfflineBanner'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import NewBill from './pages/NewBill'
@@ -60,7 +59,6 @@ export default function App() {
             path="/"
             element={
               <PrivateRoute>
-                <OfflineBanner />
                 <AppLayout />
               </PrivateRoute>
             }

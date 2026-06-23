@@ -8,6 +8,7 @@ import {
   MenuFoldOutlined, MenuUnfoldOutlined, QuestionCircleOutlined, PlusOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../store/authStore'
+import OfflineBanner from './OfflineBanner'
 
 const { Sider, Header, Content } = Layout
 const { Text } = Typography
@@ -329,6 +330,7 @@ export default function AppLayout() {
             </Space>
           </Header>
 
+          <OfflineBanner />
           <Content style={{ margin: '24px', minHeight: 'calc(100vh - 56px)' }}>
             <Outlet />
           </Content>
@@ -355,6 +357,7 @@ export default function AppLayout() {
         paddingBottom: 90,
         minHeight: '100vh',
       }}>
+        <OfflineBanner />
         <div style={{ padding: '14px 14px 0' }}>
           <Outlet />
         </div>
