@@ -76,7 +76,42 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Splash shown instantly before React loads -->
+      <div id="app-splash" style="
+        position:fixed;inset:0;
+        background:#0a0118;
+        display:flex;flex-direction:column;
+        align-items:center;justify-content:center;
+        font-family:'Segoe UI',sans-serif;
+        z-index:9999;
+      ">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:20px">
+          <rect width="64" height="64" rx="16" fill="#C9A84C"/>
+          <text x="32" y="44" text-anchor="middle" font-size="36" font-weight="bold" fill="#0a0118" font-family="Segoe UI">₹</text>
+        </svg>
+        <div style="color:#C9A84C;font-size:22px;font-weight:700;letter-spacing:1px;margin-bottom:8px">Local Billing</div>
+        <div style="color:rgba(255,255,255,0.45);font-size:13px;margin-bottom:28px">Billing Software for Clothing Stores</div>
+        <div style="width:40px;height:4px;background:rgba(201,168,76,0.2);border-radius:2px;overflow:hidden">
+          <div id="splash-bar" style="width:0%;height:100%;background:#C9A84C;border-radius:2px;transition:width 0.4s ease"></div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Animate loading bar and hide splash once React mounts
+      var bar = document.getElementById('splash-bar');
+      var pct = 0;
+      var iv = setInterval(function() { pct = Math.min(pct + 8, 90); bar.style.width = pct + '%'; }, 120);
+      var obs = new MutationObserver(function() {
+        var splash = document.getElementById('app-splash');
+        if (splash && document.getElementById('root').children.length > 1) {
+          clearInterval(iv); bar.style.width = '100%';
+          setTimeout(function() { splash.style.opacity='0'; splash.style.transition='opacity 0.3s'; setTimeout(function(){ splash.remove(); }, 300); }, 200);
+          obs.disconnect();
+        }
+      });
+      obs.observe(document.getElementById('root'), { childList: true, subtree: true });
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
