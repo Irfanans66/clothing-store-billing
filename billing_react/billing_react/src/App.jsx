@@ -37,19 +37,19 @@ export default function App() {
   return (
     <ConfigProvider
       theme={{
-        algorithm: antTheme.darkAlgorithm,
+        algorithm: antTheme.defaultAlgorithm,
         token: {
-          colorPrimary:        '#C9A84C',
-          colorLink:           '#C9A84C',
+          colorPrimary:        '#82B8D4',
+          colorLink:           '#5E9AB8',
           fontFamily:          "'Poppins', 'Inter', 'Segoe UI', sans-serif",
           borderRadius:        12,
-          colorBgLayout:       'transparent',
-          colorBgContainer:    'rgba(18, 10, 3, 0.55)',
-          colorBgElevated:     'rgba(25, 14, 4, 0.80)',
-          colorBorder:         'rgba(201, 168, 76, 0.2)',
-          colorText:           'rgba(255,255,255,0.92)',
-          colorTextSecondary:  'rgba(255,255,255,0.55)',
-          colorTextTertiary:   'rgba(255,255,255,0.38)',
+          colorBgLayout:       '#EDE8E2',
+          colorBgContainer:    '#EDE8E2',
+          colorBgElevated:     '#EDE8E2',
+          colorBorder:         '#D8D2CB',
+          colorText:           '#3A3530',
+          colorTextSecondary:  '#9A9490',
+          colorTextTertiary:   '#B8B2AC',
         },
       }}
     >

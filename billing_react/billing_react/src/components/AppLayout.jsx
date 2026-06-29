@@ -14,8 +14,8 @@ const { Sider, Header, Content } = Layout
 const { Text } = Typography
 const { useBreakpoint } = Grid
 
-const GOLD = '#C9A84C'
-const GOLD_LIGHT = '#E8C87A'
+const GOLD = '#82B8D4'
+const GOLD_LIGHT = '#96C9B0'
 
 const ROLE_COLORS = {
   Admin: 'blue', Manager: 'green', Cashier: 'orange',
@@ -314,14 +314,15 @@ export default function AppLayout() {
             />
             <Space>
               {storeName && (
-                <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{storeName}</Text>
+                <Text style={{ fontSize: 13, color: '#9A9490' }}>{storeName}</Text>
               )}
-              <Tag color={ROLE_COLORS[role] || 'default'} style={{ margin: 0 }}>{role}</Tag>
+              <Tag color="blue" style={{ margin: 0, boxShadow: '2px 2px 6px rgba(163,155,140,0.4), -2px -2px 6px rgba(255,255,255,0.9)', border: 'none' }}>{role}</Tag>
               <Dropdown menu={desktopUserMenu} trigger={['click']}>
                 <Space style={{ cursor: 'pointer' }}>
                   <Avatar style={{
-                    background: `linear-gradient(135deg, ${GOLD}, ${GOLD_LIGHT})`,
-                    width: 32, height: 32, lineHeight: '32px', fontWeight: 700, color: '#1a0a00',
+                    background: 'linear-gradient(135deg, #82B8D4, #5E9AB8)',
+                    width: 32, height: 32, lineHeight: '32px', fontWeight: 700, color: '#fff',
+                    boxShadow: '3px 3px 8px rgba(163,155,140,0.5), -2px -2px 6px rgba(255,255,255,0.9)',
                   }}>
                     {username?.[0]?.toUpperCase()}
                   </Avatar>
@@ -341,7 +342,7 @@ export default function AppLayout() {
 
   // ── Mobile layout ─────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', position: 'relative', background: 'transparent' }}>
+    <div style={{ minHeight: '100vh', position: 'relative', background: '#EDE8E2' }}>
 
       {/* Fixed glass top header */}
       <MobileTopHeader
