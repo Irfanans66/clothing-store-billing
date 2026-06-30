@@ -276,7 +276,9 @@ export default function NewBill() {
   async function handleGenerateBill() {
     if (!customer) { message.error('Select a customer first'); return }
     if (!cart.length) { message.error('Add at least one item'); return }
-    if (!isCredit && amountPaid < grand) {
+    // For non-credit modes amount is auto-set to grand; only block if user
+    // manually entered less (allow 1 rupee tolerance for float rounding)
+    if (!isCredit && amountPaid < grand - 1) {
       message.error('Amount paid is less than total'); return
     }
 
@@ -289,7 +291,7 @@ export default function NewBill() {
         items: cart.map(({ _key, item_total, base_price, item_disc_pct, ...it }) => it),
         discount: disc, discount_type: discType,
         payment_mode: isPartialCredit ? `${splitPayMode}+Credit` : payMode,
-        amount_paid: isCredit ? upfront : amountPaid,
+        amount_paid: isCredit ? upfront : grand,
         notes,
       }
 
