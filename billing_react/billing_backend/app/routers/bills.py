@@ -5,6 +5,18 @@ import datetime
 import io
 import uuid
 from typing import List, Optional
+from urllib.parse import quote
+
+
+def _upi_payment_url(upi_id: str, store_name: str, amount: int, bill_no: str) -> str:
+    return (
+        f"upi://pay?pa={quote(upi_id, safe='')}"
+        f"&pn={quote(store_name or '', safe='')}"
+        f"&am={amount}"
+        f"&cu=INR"
+        f"&tr={quote(bill_no, safe='')}"
+        f"&tn={quote(f'Payment for {bill_no}', safe='')}"
+    )
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
@@ -232,7 +244,7 @@ def _receipt_design1(bill, raw_items, store) -> bytes:
         try:
             import qrcode
             from reportlab.lib.utils import ImageReader
-            qr_img = qrcode.make(f'upi://pay?pa={upi_id}&pn={sname}&am={int(float(bill.grand_total))}&cu=INR&tn=Bill%20{bill.bill_no}')
+            qr_img = qrcode.make(_upi_payment_url(upi_id, sname, int(float(bill.grand_total)), bill.bill_no))
             qr_buf = io.BytesIO(); qr_img.save(qr_buf, format='PNG'); qr_buf.seek(0)
             sz = 25 * mm
             c.drawImage(ImageReader(qr_buf), (W - sz) / 2, y - sz, sz, sz); y -= sz + 3 * mm
@@ -375,7 +387,7 @@ def _receipt_design2(bill, raw_items, store) -> bytes:
         try:
             import qrcode
             from reportlab.lib.utils import ImageReader
-            qr_img = qrcode.make(f'upi://pay?pa={upi_id}&pn={sname}&am={int(grand)}&cu=INR&tn=Bill%20{bill.bill_no}')
+            qr_img = qrcode.make(_upi_payment_url(upi_id, sname, int(grand), bill.bill_no))
             qr_buf = io.BytesIO(); qr_img.save(qr_buf, format='PNG'); qr_buf.seek(0)
             sz = 25 * mm
             c.drawImage(ImageReader(qr_buf), (W - sz) / 2, y - sz, sz, sz); y -= sz + 3 * mm
@@ -501,7 +513,7 @@ def _receipt_design3(bill, raw_items, store) -> bytes:
         try:
             import qrcode
             from reportlab.lib.utils import ImageReader
-            qr_img = qrcode.make(f'upi://pay?pa={upi_id}&pn={sname}&am={int(grand)}&cu=INR&tn=Bill%20{bill.bill_no}')
+            qr_img = qrcode.make(_upi_payment_url(upi_id, sname, int(grand), bill.bill_no))
             qr_buf = io.BytesIO(); qr_img.save(qr_buf, format='PNG'); qr_buf.seek(0)
             sz = 26 * mm; c.drawImage(ImageReader(qr_buf), (W - sz) / 2, y - sz, sz, sz); y -= sz + 3 * mm
         except Exception:
@@ -620,7 +632,7 @@ def _receipt_design4(bill, raw_items, store) -> bytes:
         try:
             import qrcode
             from reportlab.lib.utils import ImageReader
-            qr_img = qrcode.make(f'upi://pay?pa={upi_id}&pn={sname}&am={int(grand)}&cu=INR&tn=Bill%20{bill.bill_no}')
+            qr_img = qrcode.make(_upi_payment_url(upi_id, sname, int(grand), bill.bill_no))
             qr_buf = io.BytesIO(); qr_img.save(qr_buf, format='PNG'); qr_buf.seek(0)
             sz = 26 * mm; c.drawImage(ImageReader(qr_buf), (W - sz) / 2, y - sz, sz, sz); y -= sz + 4 * mm
         except Exception:
@@ -804,11 +816,7 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
     if has_qr:
         try:
             import qrcode
-            upi_url = (
-                f"upi://pay?pa={upi_id}&pn={store.store_name}"
-                f"&am={int(bill.grand_total)}&cu=INR"
-                f"&tn=Bill%20{bill.bill_no}"
-            )
+            upi_url = _upi_payment_url(upi_id, store.store_name, int(bill.grand_total), bill.bill_no)
             qr_img = qrcode.make(upi_url)
             qr_buf = io.BytesIO()
             qr_img.save(qr_buf, format="PNG")

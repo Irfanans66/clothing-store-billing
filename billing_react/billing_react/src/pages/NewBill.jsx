@@ -17,6 +17,7 @@ import { useAuthStore } from '../store/authStore'
 import { useOfflineStore } from '../store/offlineStore'
 import { printPdfWithAuth } from '../utils/pdf'
 import GPayButton from '../components/GPayButton'
+import UpiQrCode from '../components/UpiQrCode'
 
 const { Title, Text } = Typography
 const { useBreakpoint } = Grid
@@ -1115,6 +1116,14 @@ export default function NewBill() {
                 </Space>
               }
             >
+              {storeProfile?.upi_id && (
+                <UpiQrCode
+                  bill={lastBill}
+                  storeProfile={storeProfile}
+                  storeName={storeName}
+                  size={isMobile ? 150 : 190}
+                />
+              )}
               <ReceiptPreview bill={lastBill} />
               {lastBill.share_token && (
                 <div style={{ marginTop: 8, padding: '8px 12px', background: '#f0f9ff', borderRadius: 8, fontSize: 11, color: '#555', wordBreak: 'break-all' }}>
