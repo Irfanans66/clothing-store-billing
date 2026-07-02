@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons'
 import { useAuthStore } from '../store/authStore'
 import OfflineBanner from './OfflineBanner'
+import PaymentMonitor from './PaymentMonitor'
 
 const { Sider, Header, Content } = Layout
 const { Text } = Typography
@@ -336,6 +337,7 @@ export default function AppLayout() {
             <Outlet />
           </Content>
         </Layout>
+        <PaymentMonitor />
       </Layout>
     )
   }
@@ -359,6 +361,7 @@ export default function AppLayout() {
         minHeight: '100vh',
       }}>
         <OfflineBanner />
+        <PaymentMonitor />
         <div style={{ padding: '14px 14px 0' }}>
           <Outlet />
         </div>

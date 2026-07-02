@@ -19,6 +19,12 @@ function UpiQrPreview({ upiId, storeName }) {
   )
 }
 
+const PLATFORMS = {
+  gpay:    { label: 'GPay Business',    url: 'https://business.google.com/',  desc: 'Google Pay for Business dashboard' },
+  phonepe: { label: 'PhonePe Business', url: 'https://business.phonepe.com/', desc: 'PhonePe Business dashboard' },
+  both:    { label: 'GPay + PhonePe',   url: null,                            desc: 'Open both dashboards side by side' },
+}
+
 export default function Settings() {
   const { role, storeName } = useAuthStore()
   const [profile, setProfile] = useState(null)
@@ -28,6 +34,9 @@ export default function Settings() {
   const [previewUpi, setPreviewUpi] = useState('')
   const [paperSize, setPaperSize] = useState(
     () => localStorage.getItem('receipt_paper_size') || '3inch'
+  )
+  const [payMonitor, setPayMonitor] = useState(
+    () => localStorage.getItem('payment_monitor_platform') || ''
   )
 
   useEffect(() => {
@@ -183,6 +192,63 @@ export default function Settings() {
                     {paperSize === 'design3' && 'Bill + Logo — logo placeholder, colored table header, totals box and black footer bar.'}
                     {paperSize === 'design4' && 'Tax Invoice — large blue store name, GST breakdown table, clean minimal layout.'}
                   </div>
+                </div>
+              ),
+            },
+            {
+              key: 'payment-monitor',
+              label: '💳 Payment Monitor',
+              children: (
+                <div style={{ maxWidth: 520 }}>
+                  <Alert type="info" showIcon style={{ marginBottom: 20 }}
+                    message="Payment Monitor"
+                    description="Choose your payment platform. A floating 💳 button will appear on every page — click it to open your payment dashboard in a popup window alongside the billing app."
+                  />
+                  <div style={{ fontWeight: 600, color: '#3A3530', marginBottom: 12 }}>Select Platform</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+                    {[['gpay','🟦','GPay Business','Opens Google Pay for Business'],
+                      ['phonepe','💜','PhonePe Business','Opens PhonePe Business dashboard'],
+                      ['both','💳','GPay + PhonePe','Opens both side by side'],
+                      ['','❌','Disable','Hide the payment monitor button']
+                    ].map(([val, icon, label, desc]) => (
+                      <div key={val} onClick={() => {
+                          setPayMonitor(val)
+                          localStorage.setItem('payment_monitor_platform', val)
+                          message.success(val ? `${label} selected!` : 'Payment Monitor disabled')
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 14,
+                          padding: '12px 16px', borderRadius: 14, cursor: 'pointer',
+                          background: '#EDE8E2',
+                          boxShadow: payMonitor === val
+                            ? 'inset 4px 4px 10px rgba(163,155,140,0.55), inset -4px -4px 10px rgba(255,255,255,0.92)'
+                            : '4px 4px 12px rgba(163,155,140,0.4), -4px -4px 10px rgba(255,255,255,0.85)',
+                          transition: 'box-shadow 0.2s',
+                          border: payMonitor === val ? '1.5px solid #82B8D4' : '1.5px solid transparent',
+                        }}>
+                        <span style={{ fontSize: 22 }}>{icon}</span>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: payMonitor === val ? '#5E9AB8' : '#3A3530' }}>{label}</div>
+                          <div style={{ fontSize: 12, color: '#9A9490' }}>{desc}</div>
+                        </div>
+                        {payMonitor === val && <span style={{ marginLeft: 'auto', color: '#82B8D4', fontWeight: 700 }}>✓</span>}
+                      </div>
+                    ))}
+                  </div>
+                  {payMonitor && PLATFORMS[payMonitor] && (
+                    <Button type="primary" size="large"
+                      onClick={() => {
+                        if (payMonitor === 'both') {
+                          window.open(PLATFORMS.gpay.url, '_blank')
+                          setTimeout(() => window.open(PLATFORMS.phonepe.url, '_blank'), 300)
+                        } else {
+                          window.open(PLATFORMS[payMonitor].url, '_blank')
+                        }
+                      }}
+                    >
+                      🔗 Open {PLATFORMS[payMonitor].label} Now
+                    </Button>
+                  )}
                 </div>
               ),
             },
