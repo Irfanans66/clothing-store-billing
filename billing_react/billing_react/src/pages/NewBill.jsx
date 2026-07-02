@@ -16,6 +16,7 @@ import {
 import { useAuthStore } from '../store/authStore'
 import { useOfflineStore } from '../store/offlineStore'
 import { printPdfWithAuth } from '../utils/pdf'
+import GPayButton from '../components/GPayButton'
 
 const { Title, Text } = Typography
 const { useBreakpoint } = Grid
@@ -1082,6 +1083,15 @@ export default function NewBill() {
                     >
                       Copy Link
                     </Button>
+                  )}
+
+                  {storeProfile?.upi_id && (
+                    <GPayButton
+                      bill={lastBill}
+                      storeProfile={storeProfile}
+                      storeName={storeName}
+                      size={isMobile ? 'small' : 'middle'}
+                    />
                   )}
 
                   {lastBill.phone && (
