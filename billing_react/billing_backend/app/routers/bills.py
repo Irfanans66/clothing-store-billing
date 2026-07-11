@@ -72,8 +72,12 @@ def _compute_bill(items_in, discount: float, discount_type: str, amount_paid: fl
     grand        = round(adj_sub + adj_gst)
     change       = round(amount_paid - grand, 2)
 
-    # Allow underpayment only for Credit mode
-    if change < -0.01 and payment_mode.lower() != "credit":
+ocu    # Allow underpayment only when Credit line is involved.
+    # Matches "Credit" (full credit) and "Cash+Credit" / "UPI+Credit" etc. (split),
+    # but NOT "Credit Card" (that's immediate card payment, not a credit line).
+    _mode = (payment_mode or "").lower()
+    _has_credit_line = _mode == "credit" or _mode.endswith("+credit")
+    if change < -0.01 and not _has_credit_line:
         raise HTTPException(
             status_code=400,
             detail=f"Amount paid Rs.{amount_paid} is less than total Rs.{grand}."
@@ -986,8 +990,12 @@ def create_bill(
     token      = str(uuid.uuid4())
 
     # Determine status
+    # Full-credit AND partial-credit (e.g. "Cash+Credit") both mark the bill as Credit
+    # when there's a shortfall, so the outstanding amount rolls into credit_balance.
+    _mode_l = (payload.payment_mode or "").lower()
+    _has_credit_line = _mode_l == "credit" or _mode_l.endswith("+credit")
     bill_status = "Paid"
-    if payload.payment_mode.lower() == "credit" and change < 0:
+    if _has_credit_line and change < 0:
         bill_status = "Credit"
 
     try:
