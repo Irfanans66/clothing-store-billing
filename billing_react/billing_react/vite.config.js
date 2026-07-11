@@ -44,6 +44,12 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,woff2}'],
+        // Auto-update: new SW activates immediately + takes over all open tabs.
+        // Combined with registerType:'autoUpdate' above, new deploys land on
+        // the shopkeeper's next page load without needing a hard refresh.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
