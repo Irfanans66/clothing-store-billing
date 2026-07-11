@@ -17,6 +17,7 @@ import Settings from './pages/Settings'
 import SuperAdmin from './pages/SuperAdmin'
 import Help from './pages/Help'
 import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
 
 function PrivateRoute({ children }) {
   const token = useAuthStore((s) => s.token)
@@ -57,6 +58,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
           <Route
             path="/"
             element={
