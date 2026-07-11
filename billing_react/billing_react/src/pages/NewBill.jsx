@@ -190,7 +190,7 @@ export default function NewBill() {
         _key: key, item_id: prod.item_id, product_name: prod.product_name,
         category: prod.category || '', size: sz, color: prod.color || '',
         qty: q, mrp, base_price: sp, selling_price: sp,
-        item_disc_pct: 0,
+        item_disc_pct: 0, item_disc_type: '%', item_disc_val: 0,
         discount_pct: disc, subtotal: sub, gst_pct: gst, gst_amt: gamt,
         item_total: sub + gamt,
       }]
@@ -202,12 +202,31 @@ export default function NewBill() {
     setTimeout(() => itemInputRef.current?.focus(), 50)
   }
 
-  function applyItemDisc(item, newDiscPct) {
-    const d = Math.max(0, Math.min(100, newDiscPct || 0))
-    const sp  = Math.round(item.base_price * (1 - d / 100) * 100) / 100
-    const sub = Math.round(sp * item.qty)
+  function applyItemDisc(item, val, type = '%') {
+    // val is the raw user-entered value (percent OR rupees per unit off).
+    // We normalize to an effective percent (`item_disc_pct`) so the rest of
+    // the code path stays unchanged.
+    const v = Math.max(0, val || 0)
+    let effPct
+    if (type === 'Rs.') {
+      const rsOffPerUnit = Math.min(item.base_price || item.mrp || 0, v)
+      effPct = item.base_price > 0 ? (rsOffPerUnit / item.base_price) * 100 : 0
+    } else {
+      effPct = Math.min(100, v)
+    }
+    const sp   = Math.round(item.base_price * (1 - effPct / 100) * 100) / 100
+    const sub  = Math.round(sp * item.qty)
     const gamt = Math.round(sub * item.gst_pct / 100)
-    return { ...item, item_disc_pct: d, selling_price: sp, subtotal: sub, gst_amt: gamt, item_total: sub + gamt }
+    return {
+      ...item,
+      item_disc_type: type,
+      item_disc_val:  v,
+      item_disc_pct:  Math.round(effPct * 10) / 10,
+      selling_price:  sp,
+      subtotal:       sub,
+      gst_amt:        gamt,
+      item_total:     sub + gamt,
+    }
   }
 
   async function handleItemEnter(e) {
@@ -329,7 +348,7 @@ export default function NewBill() {
         customer_id:   customer.customer_id,
         customer_name: customer.name,
         phone:         customer.phone || '',
-        items: cart.map(({ _key, item_total, base_price, item_disc_pct, ...it }) => it),
+        items: cart.map(({ _key, item_total, base_price, item_disc_pct, item_disc_type, item_disc_val, ...it }) => it),
         discount: disc, discount_type: discType,
         payment_mode: isPartialCredit ? `${splitPayMode}+Credit` : payMode,
         amount_paid: isCredit ? upfront : grand,
@@ -388,16 +407,32 @@ export default function NewBill() {
       ),
     },
     {
-      title: 'Disc%', dataIndex: 'item_disc_pct', key: 'd', width: 75,
-      render: (v, rec) => (
-        <Tooltip title="Extra discount for this item">
-          <InputNumber
-            min={0} max={100} value={v} size="small"
-            style={{ width: 65 }} suffix="%"
-            onChange={(nv) => setCart((prev) =>
-              prev.map((it) => it._key === rec._key ? applyItemDisc(it, nv) : it)
-            )}
-          />
+      title: 'Disc', key: 'd', width: 130,
+      render: (_, rec) => (
+        <Tooltip title="Extra discount for this item — choose % or ₹ (per unit)">
+          <Space.Compact size="small">
+            <Select
+              size="small"
+              value={rec.item_disc_type || '%'}
+              onChange={(t) => setCart((prev) => prev.map((it) =>
+                it._key === rec._key ? applyItemDisc(it, 0, t) : it
+              ))}
+              style={{ width: 55 }}
+            >
+              <Select.Option value="%">%</Select.Option>
+              <Select.Option value="Rs.">₹</Select.Option>
+            </Select>
+            <InputNumber
+              min={0}
+              max={(rec.item_disc_type || '%') === 'Rs.' ? (rec.base_price || rec.mrp || 100000) : 100}
+              value={rec.item_disc_val || 0}
+              size="small"
+              style={{ width: 70 }}
+              onChange={(nv) => setCart((prev) => prev.map((it) =>
+                it._key === rec._key ? applyItemDisc(it, nv, it.item_disc_type || '%') : it
+              ))}
+            />
+          </Space.Compact>
         </Tooltip>
       ),
     },
@@ -438,11 +473,26 @@ export default function NewBill() {
                       item_total: Math.round(Math.round(it.selling_price * nv) * (1 + it.gst_pct / 100)) }
                   : it
               ))} />
-            <InputNumber min={0} max={100} value={rec.item_disc_pct}
-              style={{ width: 80 }} suffix="% off" size="middle"
-              onChange={(nv) => setCart((prev) =>
-                prev.map((it) => it._key === rec._key ? applyItemDisc(it, nv) : it)
-              )} />
+            <Space.Compact size="middle">
+              <Select
+                value={rec.item_disc_type || '%'}
+                onChange={(t) => setCart((prev) => prev.map((it) =>
+                  it._key === rec._key ? applyItemDisc(it, 0, t) : it
+                ))}
+                style={{ width: 58 }}
+              >
+                <Select.Option value="%">%</Select.Option>
+                <Select.Option value="Rs.">₹</Select.Option>
+              </Select>
+              <InputNumber
+                min={0}
+                max={(rec.item_disc_type || '%') === 'Rs.' ? (rec.base_price || rec.mrp || 100000) : 100}
+                value={rec.item_disc_val || 0}
+                style={{ width: 90 }} placeholder="off"
+                onChange={(nv) => setCart((prev) => prev.map((it) =>
+                  it._key === rec._key ? applyItemDisc(it, nv, it.item_disc_type || '%') : it
+                ))} />
+            </Space.Compact>
           </div>
         </div>
       ),
