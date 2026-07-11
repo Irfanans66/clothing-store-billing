@@ -28,8 +28,9 @@ def _migrate_db():
         "ALTER TABLE customers ADD COLUMN credit_balance REAL DEFAULT 0.0",
         "ALTER TABLE bills ADD COLUMN loyalty_earned_pts INTEGER DEFAULT 0",
         "ALTER TABLE bills ADD COLUMN loyalty_redeemed_pts INTEGER DEFAULT 0",
-        "ALTER TABLE customers ADD COLUMN wallet_object_id TEXT",
-        "ALTER TABLE customers ADD COLUMN wallet_link_sent_at DATETIME",
+        "ALTER TABLE customers ADD COLUMN wallet_object_id VARCHAR(120)",
+        # TIMESTAMP works on both Postgres and SQLite; DATETIME is SQLite-only.
+        "ALTER TABLE customers ADD COLUMN wallet_link_sent_at TIMESTAMP",
     ]
     for stmt in migrations:
         try:
