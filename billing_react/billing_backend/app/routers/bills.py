@@ -72,7 +72,7 @@ def _compute_bill(items_in, discount: float, discount_type: str, amount_paid: fl
     grand        = round(adj_sub + adj_gst)
     change       = round(amount_paid - grand, 2)
 
-ocu    # Allow underpayment only when Credit line is involved.
+    # Allow underpayment only when Credit line is involved.
     # Matches "Credit" (full credit) and "Cash+Credit" / "UPI+Credit" etc. (split),
     # but NOT "Credit Card" (that's immediate card payment, not a credit line).
     _mode = (payment_mode or "").lower()
