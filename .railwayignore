@@ -1,0 +1,42 @@
+.git/
+node_modules/
+billing_react/node_modules/
+billing_react/billing_react/node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Local DBs
+*.db
+*.db-shm
+*.db-wal
+
+# Signing key & Android artifacts
+*.keystore
+*.jks
+android.keystore
+*.apk
+*.apk.idsig
+/.gradle/
+/build/
+/app/
+/gradle/
+gradlew
+gradlew.bat
+build.gradle
+settings.gradle
+gradle.properties
+local.properties
+manifest-checksum.txt
+
+# Local build outputs
+billing_react/dist/
+billing_react/billing_react/dist/
+billing_react/billing_backend/dist/
+
+# Misc
+.DS_Store
+.vscode/
+.idea/
