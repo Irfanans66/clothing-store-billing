@@ -46,3 +46,25 @@ documents/
 .dev.vars*
 !.dev.vars.example
 !.env.example
+
+# Android / Gradle build artifacts
+.gradle/
+build/
+app/build/
+gradle/
+gradlew
+gradlew.bat
+build.gradle
+settings.gradle
+gradle.properties
+local.properties
+manifest-checksum.txt
+
+# Signing keys — NEVER commit
+*.keystore
+*.jks
+android.keystore
+
+# Compiled APKs
+*.apk
+*.apk.idsig

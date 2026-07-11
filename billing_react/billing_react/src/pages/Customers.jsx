@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Card, Table, Input, Button, Space, Tag, Typography, Modal, Form, Row, Col,
   Select, message, Statistic, InputNumber, Alert, Grid } from 'antd'
-import { SearchOutlined, UserAddOutlined, EyeOutlined, WhatsAppOutlined, DollarOutlined, PhoneOutlined } from '@ant-design/icons'
-import { getCustomers, createCustomer, updateCustomer, recordCreditPayment } from '../api/client'
+import { SearchOutlined, UserAddOutlined, EyeOutlined, WhatsAppOutlined, DollarOutlined, PhoneOutlined, GiftOutlined } from '@ant-design/icons'
+import { getCustomers, createCustomer, updateCustomer, recordCreditPayment, getLoyaltyProgram, resendWalletLink } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 
@@ -26,11 +26,31 @@ export default function Customers() {
   const [payLoading, setPayLoading]   = useState(false)
   const [addForm]  = Form.useForm()
   const [editForm] = Form.useForm()
+  const [loyaltyProgram, setLoyaltyProgram] = useState(null)
   const debounceRef = useRef(null)
   const navigate = useNavigate()
   const { storeName } = useAuthStore()
   const screens  = useBreakpoint()
   const isMobile = !screens.md
+
+  useEffect(() => { getLoyaltyProgram().then(setLoyaltyProgram).catch(() => {}) }, [])
+
+  async function handleResendWallet(cust) {
+    try {
+      const res = await resendWalletLink(cust.customer_id)
+      if (res?.wallet_link) {
+        const phone = (cust.phone || '').replace(/\D/g, '')
+        const msg = `Hi ${cust.name}! 🎁 Add your ${storeName} loyalty card to Google Wallet:\n${res.wallet_link}`
+        const url = phone
+          ? `https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`
+          : null
+        if (url) window.open(url, '_blank')
+        else message.success('Wallet link generated — no phone on file to send.')
+      }
+    } catch (err) {
+      message.error(err.message || 'Google Wallet not configured yet')
+    }
+  }
 
   async function load(q = '') {
     setLoading(true)
@@ -133,10 +153,15 @@ export default function Customers() {
         : <Tag color="green">Clear</Tag>,
       sorter: (a, b) => (a.credit_balance || 0) - (b.credit_balance || 0),
     },
+    ...(loyaltyProgram?.enabled ? [{
+      title: '🎁 Points', dataIndex: 'loyalty_pts', key: 'loyalty_pts', width: 90,
+      render: (v) => <Tag color="gold">{v || 0} pts</Tag>,
+      sorter: (a, b) => (a.loyalty_pts || 0) - (b.loyalty_pts || 0),
+    }] : []),
     {
-      title: 'Actions', key: 'action', width: 180,
+      title: 'Actions', key: 'action', width: 220,
       render: (_, r) => (
-        <Space size={4}>
+        <Space size={4} wrap>
           <Button size="small" icon={<EyeOutlined />}
             onClick={() => navigate(`/bill-history?customer=${encodeURIComponent(r.name)}`)}>
             Bills
@@ -152,6 +177,14 @@ export default function Customers() {
               Remind
             </Button>
           </>}
+          {loyaltyProgram?.enabled && loyaltyProgram?.wallet_configured && (
+            <Button size="small" icon={<GiftOutlined />}
+              onClick={() => handleResendWallet(r)}
+              title="Send Google Wallet loyalty card link via WhatsApp"
+            >
+              Wallet
+            </Button>
+          )}
         </Space>
       ),
     },

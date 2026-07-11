@@ -82,6 +82,12 @@ export const adminRevenueByStore = () => api.get('/admin/revenue-by-store')
 export const adminListTickets = (status) => api.get('/admin/support-tickets', { params: status ? { status } : {} })
 export const adminReplyTicket = (id, data) => api.patch(`/admin/support-tickets/${id}`, data)
 
+// ── Loyalty ───────────────────────────────────────────────────────────────────
+export const getLoyaltyProgram = () => api.get('/loyalty/program')
+export const updateLoyaltyProgram = (data) => api.patch('/loyalty/program', data)
+export const getCustomerLoyalty = (customerId) => api.get(`/loyalty/customer/${customerId}`)
+export const resendWalletLink = (customerId) => api.post(`/loyalty/customer/${customerId}/resend-wallet-link`)
+
 // ── Support / Help ────────────────────────────────────────────────────────────
 export const submitSupportTicket = (data) => api.post('/support/', data)
 export const getMyTickets = () => api.get('/support/')

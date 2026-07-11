@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { Card, Tabs, Form, Input, Button, message, Typography, Alert, Radio } from 'antd'
-import { getStoreProfile, updateStoreProfile } from '../api/client'
+import { Card, Tabs, Form, Input, Button, message, Typography, Alert, Radio, Switch, InputNumber } from 'antd'
+import { getStoreProfile, updateStoreProfile, getLoyaltyProgram, updateLoyaltyProgram } from '../api/client'
 import { useAuthStore } from '../store/authStore'
+import { PLATFORMS, openPaymentDashboard } from '../utils/paymentPlatforms'
 
 const { Title, Text } = Typography
 
@@ -19,19 +20,15 @@ function UpiQrPreview({ upiId, storeName }) {
   )
 }
 
-const PLATFORMS = {
-  gpay:    { label: 'GPay Business',    url: 'https://business.google.com/',  desc: 'Google Pay for Business dashboard' },
-  phonepe: { label: 'PhonePe Business', url: 'https://business.phonepe.com/', desc: 'PhonePe Business dashboard' },
-  both:    { label: 'GPay + PhonePe',   url: null,                            desc: 'Open both dashboards side by side' },
-}
-
 export default function Settings() {
   const { role, storeName } = useAuthStore()
   const [profile, setProfile] = useState(null)
   const [infoForm] = Form.useForm()
   const [upiForm] = Form.useForm()
+  const [loyaltyForm] = Form.useForm()
   const [saving, setSaving] = useState(false)
   const [previewUpi, setPreviewUpi] = useState('')
+  const [loyalty, setLoyalty] = useState(null)
   const [paperSize, setPaperSize] = useState(
     () => localStorage.getItem('receipt_paper_size') || '3inch'
   )
@@ -48,7 +45,34 @@ export default function Settings() {
         setPreviewUpi(p.upi_id || '')
       })
       .catch(() => {})
+    getLoyaltyProgram()
+      .then((l) => {
+        setLoyalty(l)
+        loyaltyForm.setFieldsValue({
+          ...l,
+          rupees_per_point: l.points_per_rupee ? Math.round(1 / l.points_per_rupee) : 100,
+        })
+      })
+      .catch(() => {})
   }, [])
+
+  async function saveLoyalty(values) {
+    setSaving(true)
+    try {
+      const { rupees_per_point, ...rest } = values
+      const payload = {
+        ...rest,
+        points_per_rupee: rupees_per_point > 0 ? 1 / rupees_per_point : 0.01,
+      }
+      const updated = await updateLoyaltyProgram(payload)
+      setLoyalty(updated)
+      message.success('Loyalty program updated!')
+    } catch (err) {
+      message.error(err.message || 'Failed to save loyalty program')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (role !== 'Admin') {
     return <Card><Title level={4}>Admin access required</Title></Card>
@@ -237,17 +261,89 @@ export default function Settings() {
                   </div>
                   {payMonitor && PLATFORMS[payMonitor] && (
                     <Button type="primary" size="large"
-                      onClick={() => {
-                        if (payMonitor === 'both') {
-                          window.open(PLATFORMS.gpay.url, '_blank')
-                          setTimeout(() => window.open(PLATFORMS.phonepe.url, '_blank'), 300)
-                        } else {
-                          window.open(PLATFORMS[payMonitor].url, '_blank')
-                        }
-                      }}
+                      onClick={() => openPaymentDashboard(payMonitor)}
                     >
                       🔗 Open {PLATFORMS[payMonitor].label} Now
                     </Button>
+                  )}
+                </div>
+              ),
+            },
+            {
+              key: 'loyalty',
+              label: '🎁 Loyalty',
+              children: (
+                <div style={{ maxWidth: 520 }}>
+                  <Alert
+                    type="info" showIcon style={{ marginBottom: 20 }}
+                    message="Loyalty Rewards Program"
+                    description="Reward repeat customers with points on every bill. Points can be redeemed as ₹ discount (1 point = ₹1). If Google Wallet is enabled on the server, customers will get a Google Wallet card link on WhatsApp."
+                  />
+                  <Form
+                    form={loyaltyForm}
+                    layout="vertical"
+                    onFinish={saveLoyalty}
+                    initialValues={{
+                      enabled: false,
+                      program_name: 'Rewards',
+                      rupees_per_point: 100,
+                      welcome_bonus: 0,
+                      min_redeem_points: 50,
+                      max_redeem_percent: 50,
+                      terms: '',
+                    }}
+                  >
+                    <Form.Item name="enabled" label="Enable loyalty program" valuePropName="checked">
+                      <Switch />
+                    </Form.Item>
+                    <Form.Item name="program_name" label="Program name" extra="Shown on customer's Google Wallet card">
+                      <Input placeholder="e.g. Ramesh Kirana Rewards" />
+                    </Form.Item>
+                    <Form.Item
+                      name="rupees_per_point"
+                      label="Points ratio"
+                      extra="Customers earn 1 point per this many rupees spent. E.g. ₹100 → 1 point."
+                    >
+                      <InputNumber min={1} max={10000} step={10} style={{ width: 200 }} addonBefore="₹" addonAfter="= 1 point" />
+                    </Form.Item>
+                    <Form.Item
+                      name="welcome_bonus"
+                      label="Welcome bonus"
+                      extra="Points given to a customer on their first bill (0 to disable)."
+                    >
+                      <InputNumber min={0} max={10000} style={{ width: 200 }} />
+                    </Form.Item>
+                    <Form.Item
+                      name="min_redeem_points"
+                      label="Minimum points to redeem"
+                      extra="Customer must have at least this many points before redeeming."
+                    >
+                      <InputNumber min={0} max={100000} style={{ width: 200 }} />
+                    </Form.Item>
+                    <Form.Item
+                      name="max_redeem_percent"
+                      label="Max redemption %"
+                      extra="Cap points redemption to this % of any single bill."
+                    >
+                      <InputNumber min={0} max={100} style={{ width: 200 }} addonAfter="%" />
+                    </Form.Item>
+                    <Form.Item name="terms" label="Terms &amp; conditions (optional)">
+                      <Input.TextArea rows={2} placeholder="e.g. Points valid for 1 year, non-transferable" />
+                    </Form.Item>
+                    <Button type="primary" htmlType="submit" loading={saving}>Save Loyalty Program</Button>
+                  </Form>
+
+                  {loyalty && (
+                    <div style={{ marginTop: 20, padding: '12px 14px', background: 'rgba(201,168,76,0.08)', borderRadius: 8, border: '1px solid rgba(201,168,76,0.2)', fontSize: 13 }}>
+                      <div><strong>Google Wallet status:</strong>{' '}
+                        {loyalty.wallet_configured
+                          ? <span style={{ color: '#4caf50' }}>✓ Card class provisioned</span>
+                          : <span style={{ color: '#c9a84c' }}>⏳ Not yet configured on server</span>}
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+                        Points work fully without Google Wallet. When issuer credentials are added to the server, customers will start receiving Wallet card links automatically.
+                      </div>
+                    </div>
                   )}
                 </div>
               ),

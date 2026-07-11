@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_store_access, require_admin_or_manager
-from app.models.models import Customer
+from app.models.models import Customer, LoyaltyProgram
 from app.schemas.schemas import CustomerCreate, CustomerOut, CustomerUpdate, MessageResponse
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
@@ -84,6 +84,12 @@ def create_customer(
         if exists:
             raise HTTPException(status_code=400, detail=f"Customer with phone {payload.phone} already exists (ID: {exists.customer_id}).")
 
+    # Apply welcome bonus if a loyalty program is enabled
+    program = db.query(LoyaltyProgram).filter(LoyaltyProgram.store_code == sc).first()
+    welcome_pts = 0
+    if program and program.enabled and (program.welcome_bonus or 0) > 0:
+        welcome_pts = int(program.welcome_bonus)
+
     cust = Customer(
         store_code=sc,
         customer_id=cid,
@@ -98,6 +104,7 @@ def create_customer(
         member_type=payload.member_type,
         member_since=datetime.date.today().strftime("%Y-%m-%d"),
         notes=payload.notes,
+        loyalty_pts=welcome_pts,
     )
     db.add(cust)
     db.commit()

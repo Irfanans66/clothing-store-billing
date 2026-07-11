@@ -18,13 +18,13 @@ def _upi_payment_url(upi_id: str, store_name: str, amount: int, bill_no: str) ->
         f"&tn={quote(f'Payment for {bill_no}', safe='')}"
     )
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.core.database import get_db
 from app.core.deps import require_store_access
-from app.models.models import Bill, BillItem, BillReturn, BillReturnItem, Customer, Product, Store
+from app.models.models import Bill, BillItem, BillReturn, BillReturnItem, Customer, LoyaltyProgram, Product, Store
 from app.schemas.schemas import BillCreate, BillOut, BillSummary, MessageResponse, ReturnRequest, ReturnOut
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
@@ -36,7 +36,8 @@ def _next_bill_no(db: Session, store_code: str) -> str:
     return f"BILL{(max_id + 1):04d}"
 
 
-def _compute_bill(items_in, discount: float, discount_type: str, amount_paid: float, payment_mode: str = "Cash"):
+def _compute_bill(items_in, discount: float, discount_type: str, amount_paid: float,
+                  payment_mode: str = "Cash", loyalty_redeem_rupees: float = 0.0):
     line_items = []
     raw_sub = 0.0
     raw_gst = 0.0
@@ -63,11 +64,13 @@ def _compute_bill(items_in, discount: float, discount_type: str, amount_paid: fl
         raw_sub += sub
         raw_gst += gamt
 
-    disc_amt = min(round(float(discount), 2), raw_sub)
-    adj_sub  = round(raw_sub - disc_amt, 2)
-    adj_gst  = round((raw_gst / raw_sub * adj_sub) if raw_sub else 0, 2)
-    grand    = round(adj_sub + adj_gst)
-    change   = round(amount_paid - grand, 2)
+    user_disc    = min(round(float(discount), 2), raw_sub)
+    loyalty_disc = min(round(float(loyalty_redeem_rupees), 2), max(0.0, raw_sub - user_disc))
+    disc_amt     = round(user_disc + loyalty_disc, 2)
+    adj_sub      = round(raw_sub - disc_amt, 2)
+    adj_gst      = round((raw_gst / raw_sub * adj_sub) if raw_sub else 0, 2)
+    grand        = round(adj_sub + adj_gst)
+    change       = round(amount_paid - grand, 2)
 
     # Allow underpayment only for Credit mode
     if change < -0.01 and payment_mode.lower() != "credit":
@@ -85,7 +88,7 @@ def _compute_bill(items_in, discount: float, discount_type: str, amount_paid: fl
             li["gst_amt"]  = adj_g
             li["total"]    = round(adj_s + adj_g, 2)
 
-    return line_items, raw_sub, disc_amt, adj_gst, grand, change
+    return line_items, raw_sub, user_disc, loyalty_disc, adj_gst, grand, change
 
 
 def _amount_to_words(amount: float) -> str:
@@ -836,9 +839,36 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
 
 
 # ── POST /bills ────────────────────────────────────────────────────────────────
+def _refresh_wallet_object(store_code: str, customer_id: str):
+    """Background task: push updated point balance to Google Wallet (safe no-op if disabled)."""
+    try:
+        from app.core.database import SessionLocal
+        from app.services.google_wallet import upsert_loyalty_object
+        db2 = SessionLocal()
+        try:
+            store = db2.query(Store).filter(Store.store_code == store_code).first()
+            program = db2.query(LoyaltyProgram).filter(LoyaltyProgram.store_code == store_code).first()
+            customer = db2.query(Customer).filter(
+                Customer.store_code == store_code,
+                Customer.customer_id == customer_id,
+            ).first()
+            if not (store and program and program.enabled and program.wallet_class_id and customer):
+                return
+            obj_id = upsert_loyalty_object(store, program, customer)
+            if obj_id and not customer.wallet_object_id:
+                customer.wallet_object_id = obj_id
+                db2.commit()
+        finally:
+            db2.close()
+    except Exception:
+        # Wallet not configured or transient failure — never break the bill flow.
+        pass
+
+
 @router.post("/", response_model=BillOut, status_code=status.HTTP_201_CREATED)
 def create_bill(
     payload: BillCreate,
+    background_tasks: BackgroundTasks,
     identity: dict = Depends(require_store_access),
     db: Session = Depends(get_db),
 ):
@@ -848,15 +878,55 @@ def create_bill(
     if not payload.items:
         raise HTTPException(status_code=400, detail="Bill must have at least one item.")
 
+    # Loyalty: validate redemption against program + customer balance BEFORE computing bill
+    program = db.query(LoyaltyProgram).filter(LoyaltyProgram.store_code == sc).first()
+    customer = None
+    if payload.customer_id and payload.customer_id != "WALKIN":
+        customer = db.query(Customer).filter(
+            Customer.store_code == sc, Customer.customer_id == payload.customer_id,
+        ).first()
+
+    redeem_pts = max(0, int(payload.points_redeemed or 0))
+    if redeem_pts > 0:
+        if not (program and program.enabled):
+            raise HTTPException(status_code=400, detail="Loyalty program is not enabled for this store.")
+        if not customer:
+            raise HTTPException(status_code=400, detail="Points can only be redeemed on named customers.")
+        if redeem_pts > (customer.loyalty_pts or 0):
+            raise HTTPException(status_code=400, detail=f"Customer only has {customer.loyalty_pts or 0} points.")
+        if redeem_pts < (program.min_redeem_points or 0):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Minimum {program.min_redeem_points} points required to redeem."
+            )
+
     try:
-        line_items, raw_sub, disc_amt, adj_gst, grand, change = _compute_bill(
+        line_items, raw_sub, user_disc, loyalty_disc, adj_gst, grand, change = _compute_bill(
             payload.items, payload.discount, payload.discount_type,
             payload.amount_paid, payload.payment_mode,
+            loyalty_redeem_rupees=float(redeem_pts),  # 1 point = ₹1
         )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Bill calculation error: {str(e)}")
+
+    # Cap loyalty redemption at program.max_redeem_percent of raw_sub
+    if redeem_pts > 0 and program:
+        cap_rupees = round(raw_sub * (program.max_redeem_percent or 100) / 100, 2)
+        if loyalty_disc > cap_rupees:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot redeem more than {program.max_redeem_percent:.0f}% of the bill (₹{cap_rupees:.0f} max)."
+            )
+    redeemed_pts_actual = int(round(loyalty_disc))  # 1 pt = ₹1
+
+    # Points earned on the *net after loyalty discount* (adj_sub, before GST): grand - GST portion
+    # We use raw_sub - loyalty_disc so store discounts still earn full points.
+    earn_pts = 0
+    if program and program.enabled and customer:
+        earn_base = max(0.0, raw_sub - loyalty_disc)
+        earn_pts = int(earn_base * (program.points_per_rupee or 0))
 
     bill_no    = _next_bill_no(db, sc)
     bill_date  = datetime.date.today().strftime("%Y-%m-%d")
@@ -878,7 +948,7 @@ def create_bill(
             customer_name = payload.customer_name or "Walk-in",
             phone         = payload.phone         or "",
             subtotal      = raw_sub,
-            discount      = disc_amt,
+            discount      = round(user_disc + loyalty_disc, 2),  # combined for legacy reports
             discount_type = payload.discount_type,
             gst_total     = adj_gst,
             grand_total   = grand,
@@ -889,6 +959,8 @@ def create_bill(
             status        = bill_status,
             notes         = payload.notes or "",
             share_token   = token,
+            loyalty_earned_pts   = earn_pts,
+            loyalty_redeemed_pts = redeemed_pts_actual,
         )
         db.add(bill)
         db.flush()
@@ -908,17 +980,14 @@ def create_bill(
                 {"bill_id": bill.id, "store_code": sc, **{k: li[k] for k in li}},
             )
 
-        if payload.customer_id and payload.customer_id != "WALKIN":
-            cust = db.query(Customer).filter(
-                Customer.store_code  == sc,
-                Customer.customer_id == payload.customer_id,
-            ).first()
-            if cust:
-                cust.total_purchase = round((cust.total_purchase or 0) + grand, 2)
-                cust.loyalty_pts    = (cust.loyalty_pts or 0) + int(grand // 100)
-                # Track credit balance for credit payments
-                if bill_status == "Credit":
-                    cust.credit_balance = round((cust.credit_balance or 0) + abs(change), 2)
+        if customer:
+            customer.total_purchase = round((customer.total_purchase or 0) + grand, 2)
+            # Apply loyalty: deduct redeemed, add earned. If no program, no change.
+            new_pts = (customer.loyalty_pts or 0) - redeemed_pts_actual + earn_pts
+            customer.loyalty_pts = max(0, new_pts)
+            # Track credit balance for credit payments
+            if bill_status == "Credit":
+                customer.credit_balance = round((customer.credit_balance or 0) + abs(change), 2)
 
         db.commit()
 
@@ -935,6 +1004,26 @@ def create_bill(
         {"bill_id": bill.id}
     ).fetchall()
 
+    # Push updated point balance to Google Wallet asynchronously (no-op if unconfigured)
+    if customer and program and program.enabled and (earn_pts > 0 or redeemed_pts_actual > 0):
+        background_tasks.add_task(_refresh_wallet_object, sc, customer.customer_id)
+
+    # On first bill (link never sent), synchronously generate the Add-to-Wallet link
+    # so the frontend can include it in the WhatsApp receipt.
+    wallet_link = None
+    if (customer and program and program.enabled and program.wallet_class_id
+            and not customer.wallet_link_sent_at):
+        try:
+            from app.services.google_wallet import build_add_to_wallet_url
+            store_obj = db.query(Store).filter(Store.store_code == sc).first()
+            wallet_link = build_add_to_wallet_url(store_obj, program, customer)
+            if wallet_link:
+                from datetime import datetime as _dt, timezone as _tz
+                customer.wallet_link_sent_at = _dt.now(_tz.utc)
+                db.commit()
+        except Exception:
+            wallet_link = None
+
     return {
         "id": bill.id, "store_code": bill.store_code, "bill_no": bill.bill_no,
         "bill_date": bill.bill_date, "bill_time": bill.bill_time,
@@ -945,6 +1034,9 @@ def create_bill(
         "change_amt": bill.change_amt, "payment_mode": bill.payment_mode,
         "cashier": bill.cashier, "status": bill.status, "notes": bill.notes,
         "share_token": bill.share_token, "created_at": bill.created_at,
+        "loyalty_earned_pts": bill.loyalty_earned_pts or 0,
+        "loyalty_redeemed_pts": bill.loyalty_redeemed_pts or 0,
+        "wallet_link": wallet_link,
         "items": [
             {"id": r[0], "item_id": r[3], "product_name": r[4], "category": r[5],
              "size": r[6], "color": r[7], "qty": r[8], "mrp": r[9],
@@ -1051,6 +1143,8 @@ def get_bill(
         "change_amt": bill.change_amt, "payment_mode": bill.payment_mode,
         "cashier": bill.cashier, "status": bill.status, "notes": bill.notes,
         "share_token": bill.share_token, "created_at": bill.created_at,
+        "loyalty_earned_pts": bill.loyalty_earned_pts or 0,
+        "loyalty_redeemed_pts": bill.loyalty_redeemed_pts or 0,
         "items": [
             {"id": r[0], "item_id": r[3], "product_name": r[4], "category": r[5],
              "size": r[6], "color": r[7], "qty": r[8], "mrp": r[9],

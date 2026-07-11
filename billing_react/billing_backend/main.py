@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.core.database import engine, Base, SessionLocal
 from app.core.security import hash_password
 from app.models.models import SuperAdmin, Store
-from app.routers import auth, customers, products, bills, reports, store_users, admin, support
+from app.routers import auth, customers, products, bills, reports, store_users, admin, support, loyalty
 
 settings = get_settings()
 
@@ -26,6 +26,10 @@ def _migrate_db():
     migrations = [
         "ALTER TABLE bills ADD COLUMN share_token TEXT",
         "ALTER TABLE customers ADD COLUMN credit_balance REAL DEFAULT 0.0",
+        "ALTER TABLE bills ADD COLUMN loyalty_earned_pts INTEGER DEFAULT 0",
+        "ALTER TABLE bills ADD COLUMN loyalty_redeemed_pts INTEGER DEFAULT 0",
+        "ALTER TABLE customers ADD COLUMN wallet_object_id TEXT",
+        "ALTER TABLE customers ADD COLUMN wallet_link_sent_at DATETIME",
     ]
     for stmt in migrations:
         try:
@@ -115,6 +119,7 @@ app.include_router(reports.router,     prefix=PREFIX)
 app.include_router(store_users.router, prefix=PREFIX)
 app.include_router(admin.router,      prefix=PREFIX)
 app.include_router(support.router,    prefix=PREFIX)
+app.include_router(loyalty.router,    prefix=PREFIX)
 
 
 # ── Version ───────────────────────────────────────────────────────────────────

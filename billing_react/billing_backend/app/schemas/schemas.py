@@ -82,6 +82,55 @@ class StorePatchRequest(BaseModel):
     notes: Optional[str] = None
 
 
+# ── Loyalty Program ───────────────────────────────────────────────────────────
+
+class LoyaltyProgramOut(BaseModel):
+    model_config = {"from_attributes": True}
+    enabled: bool
+    program_name: str
+    points_per_rupee: float
+    welcome_bonus: int
+    min_redeem_points: int
+    max_redeem_percent: float
+    terms: Optional[str] = None
+    wallet_configured: bool = False  # True if Google Wallet class provisioned
+
+
+class LoyaltyProgramPatch(BaseModel):
+    enabled: Optional[bool] = None
+    program_name: Optional[str] = None
+    points_per_rupee: Optional[float] = None
+    welcome_bonus: Optional[int] = None
+    min_redeem_points: Optional[int] = None
+    max_redeem_percent: Optional[float] = None
+    terms: Optional[str] = None
+
+    @field_validator("points_per_rupee")
+    @classmethod
+    def positive_ratio(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("points_per_rupee must be > 0")
+        return v
+
+    @field_validator("max_redeem_percent")
+    @classmethod
+    def valid_pct(cls, v):
+        if v is not None and (v < 0 or v > 100):
+            raise ValueError("max_redeem_percent must be between 0 and 100")
+        return v
+
+
+class CustomerLoyaltyOut(BaseModel):
+    model_config = {"from_attributes": True}
+    customer_id: str
+    name: str
+    phone: Optional[str] = None
+    loyalty_pts: int = 0
+    wallet_object_id: Optional[str] = None
+    wallet_link_sent_at: Optional[datetime] = None
+    wallet_link: Optional[str] = None  # signed Add-to-Google-Wallet URL (if program enabled)
+
+
 # ── Store Users (team) ────────────────────────────────────────────────────────
 
 class StoreUserCreate(BaseModel):
@@ -256,6 +305,7 @@ class BillCreate(BaseModel):
     payment_mode: str = "Cash"
     amount_paid: float
     notes: Optional[str] = ""
+    points_redeemed: int = 0          # loyalty points redeemed on this bill (1 pt = ₹1)
 
 class BillItemOut(BaseModel):
     model_config = {"from_attributes": True}
@@ -296,6 +346,9 @@ class BillOut(BaseModel):
     status: Optional[str]
     notes: Optional[str]
     share_token: Optional[str] = None
+    loyalty_earned_pts: int = 0
+    loyalty_redeemed_pts: int = 0
+    wallet_link: Optional[str] = None  # Only populated on customer's first bill (Add to Google Wallet URL)
     created_at: Optional[datetime]
     items: List[BillItemOut] = []
     returns: List["ReturnOut"] = []

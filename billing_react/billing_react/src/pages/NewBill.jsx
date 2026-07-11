@@ -12,6 +12,7 @@ import {
 import {
   getCustomers, createCustomer, getProduct, getProducts,
   createBill, getStoreProfile, getPublicReceiptUrl,
+  getLoyaltyProgram, getCustomerLoyalty,
 } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { useOfflineStore } from '../store/offlineStore'
@@ -40,6 +41,12 @@ function buildWhatsAppMsg(bill, storeName, storeProfile, receiptUrl) {
   msg += `📅 ${bill.bill_date}  ${bill.bill_time}\n`
   if (receiptUrl) {
     msg += `${sep}\n📥 *View/Download Receipt:*\n${receiptUrl}\n`
+  }
+  if (bill.loyalty_earned_pts > 0) {
+    msg += `${sep}\n🎁 You earned *${bill.loyalty_earned_pts}* loyalty points!\n`
+  }
+  if (bill.wallet_link) {
+    msg += `${sep}\n🎁 *Save your loyalty card to Google Wallet:*\n${bill.wallet_link}\n`
   }
   if (upi_id) {
     msg += `${sep}\n💳 Pay via UPI: *${upi_id}*\nAmount: ₹${Math.round(bill.grand_total)}\n`
@@ -87,16 +94,33 @@ export default function NewBill() {
   const [lastBill, setLastBill]   = useState(null)
   const [storeProfile, setStoreProfile] = useState(null)
 
+  // Loyalty state
+  const [loyaltyProgram, setLoyaltyProgram] = useState(null)
+  const [custLoyalty, setCustLoyalty]       = useState(null)
+  const [redeemPts, setRedeemPts]           = useState(0)
+
   const itemInputRef = useRef(null)
 
   useEffect(() => {
     getStoreProfile().then(setStoreProfile).catch(() => {})
+    getLoyaltyProgram().then(setLoyaltyProgram).catch(() => {})
     // Pre-load products and customers into offline cache
     if (isOnline) {
       getProducts({ limit: 200 }).then((list) => { if (list?.length) cacheProducts(list) }).catch(() => {})
       getCustomers({ limit: 200 }).then((list) => { if (list?.length) cacheCustomers(list) }).catch(() => {})
     }
   }, [])
+
+  // Fetch customer loyalty balance whenever customer changes
+  useEffect(() => {
+    if (!customer || customer.customer_id === 'WALKIN' || !isOnline) {
+      setCustLoyalty(null); setRedeemPts(0); return
+    }
+    getCustomerLoyalty(customer.customer_id)
+      .then(setCustLoyalty)
+      .catch(() => setCustLoyalty(null))
+    setRedeemPts(0)
+  }, [customer, isOnline])
 
   // ── Customer Search ────────────────────────────────────────────────────────
   const searchCustomer = useCallback(async (val) => {
@@ -253,9 +277,21 @@ export default function NewBill() {
   const disc   = discType === '%'
     ? Math.round(rawSub * discVal / 100)
     : Math.min(discVal, rawSub)
-  const adjSub = rawSub - disc
+  // Loyalty redemption: 1 point = ₹1, capped by program max_redeem_percent and remaining subtotal
+  const maxRedeemPct  = loyaltyProgram?.max_redeem_percent ?? 100
+  const maxRedeemPts  = Math.max(0, Math.min(
+    custLoyalty?.loyalty_pts ?? 0,
+    Math.floor(rawSub * maxRedeemPct / 100 - disc),
+  ))
+  const effRedeemPts  = Math.max(0, Math.min(redeemPts, maxRedeemPts))
+  const loyDisc       = effRedeemPts
+  const adjSub = rawSub - disc - loyDisc
   const adjGst = rawSub > 0 ? Math.round(rawGst / rawSub * adjSub) : 0
   const grand  = Math.round(adjSub + adjGst)
+  // Points that will be earned on this bill (before saving)
+  const earnPts = loyaltyProgram?.enabled && customer?.customer_id !== 'WALKIN'
+    ? Math.floor(Math.max(0, rawSub - loyDisc) * (loyaltyProgram.points_per_rupee || 0))
+    : 0
 
   const isCredit     = payMode === 'Credit'
   // upfront = grand - creditAmount; partial = some amount collected now
@@ -283,6 +319,9 @@ export default function NewBill() {
     if (!isCredit && amountPaid < grand - 1) {
       message.error('Amount paid is less than total'); return
     }
+    if (effRedeemPts > 0 && effRedeemPts < (loyaltyProgram?.min_redeem_points || 0)) {
+      message.error(`Minimum ${loyaltyProgram.min_redeem_points} points required to redeem`); return
+    }
 
     setBilling(true)
     try {
@@ -295,6 +334,7 @@ export default function NewBill() {
         payment_mode: isPartialCredit ? `${splitPayMode}+Credit` : payMode,
         amount_paid: isCredit ? upfront : grand,
         notes,
+        points_redeemed: effRedeemPts,
       }
 
       if (!isOnline) {
@@ -310,7 +350,7 @@ export default function NewBill() {
       setLastBill(res)
       setCart([]); setCustomer(null); setWalkIn(false)
       setCustSearch(''); setCustResults([])
-      setDiscVal(0); setNotes(''); setCreditAmount(0)
+      setDiscVal(0); setNotes(''); setCreditAmount(0); setRedeemPts(0)
       message.success(`Bill ${res.bill_no} generated!`)
     } catch (err) {
       message.error(err.message)
@@ -507,6 +547,7 @@ export default function NewBill() {
           borderTop: `1px solid ${tk.colorBorderSecondary}`,
         }}>
           {bill.discount > 0 && row('Discount', `-₹${Math.round(bill.discount)}`, { valueColor: '#2e7d32', bold: true })}
+          {bill.loyalty_redeemed_pts > 0 && row(`Points Redeemed`, `-${bill.loyalty_redeemed_pts} pts`, { valueColor: '#c9a84c', bold: true })}
           {row('GST', `₹${Math.round(bill.gst_total)}`)}
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -519,6 +560,15 @@ export default function NewBill() {
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>₹{Math.round(bill.grand_total)}</span>
           </div>
+          {bill.loyalty_earned_pts > 0 && (
+            <div style={{
+              marginTop: 8, padding: '6px 10px', borderRadius: 8,
+              background: 'rgba(201,168,76,0.10)', border: '1px solid rgba(201,168,76,0.35)',
+              textAlign: 'center', fontSize: 12, color: '#c9a84c', fontWeight: 600,
+            }}>
+              🎁 Earned {bill.loyalty_earned_pts} loyalty points on this bill
+            </div>
+          )}
         </div>
 
         {/* ── Payment ── */}
@@ -662,6 +712,11 @@ export default function NewBill() {
                     {(customer.credit_balance > 0) && (
                       <Tag color="red" style={{ marginLeft: 4 }}>
                         Outstanding: ₹{Math.round(customer.credit_balance)}
+                      </Tag>
+                    )}
+                    {loyaltyProgram?.enabled && custLoyalty && (
+                      <Tag color="gold" style={{ marginLeft: 4 }}>
+                        🎁 {custLoyalty.loyalty_pts || 0} pts
                       </Tag>
                     )}
                   </span>
@@ -835,14 +890,56 @@ export default function NewBill() {
                 </Row>
               </div>
 
+              {/* Loyalty points redemption */}
+              {loyaltyProgram?.enabled && customer && customer.customer_id !== 'WALKIN' && custLoyalty && (
+                <div style={{ marginTop: 10, background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 8, padding: '12px 14px' }}>
+                  <Text strong>🎁 Redeem Loyalty Points</Text>
+                  <div style={{ fontSize: 12, color: '#777', marginBottom: 8 }}>
+                    Balance: <b>{custLoyalty.loyalty_pts || 0}</b> pts · 1 pt = ₹1 · Max redeem this bill: {maxRedeemPts} pts
+                    {loyaltyProgram.min_redeem_points > 0 && ` · Min ${loyaltyProgram.min_redeem_points} pts to redeem`}
+                  </div>
+                  <Row gutter={12} align="middle">
+                    <Col xs={24} sm="auto">
+                      <InputNumber
+                        min={0}
+                        max={maxRedeemPts}
+                        value={redeemPts}
+                        onChange={(v) => setRedeemPts(Math.max(0, Math.min(maxRedeemPts, v || 0)))}
+                        style={{ width: 140 }}
+                        addonAfter="pts"
+                        disabled={maxRedeemPts <= 0}
+                      />
+                    </Col>
+                    {maxRedeemPts > 0 && (
+                      <Col xs={24} sm="auto">
+                        <Button
+                          size="small"
+                          onClick={() => setRedeemPts(maxRedeemPts)}
+                        >
+                          Redeem All ({maxRedeemPts} pts = ₹{maxRedeemPts})
+                        </Button>
+                      </Col>
+                    )}
+                    {effRedeemPts > 0 && effRedeemPts < (loyaltyProgram.min_redeem_points || 0) && (
+                      <Col xs={24}>
+                        <Text type="danger" style={{ fontSize: 12 }}>
+                          Minimum {loyaltyProgram.min_redeem_points} points required to redeem.
+                        </Text>
+                      </Col>
+                    )}
+                  </Row>
+                </div>
+              )}
+
               <Row gutter={[8, 8]} style={{ marginTop: 14 }}>
                 {[
                   ['Subtotal', `₹${rawSub.toLocaleString()}`],
                   ['Discount', `-₹${disc.toLocaleString()}`],
+                  ...(loyDisc > 0 ? [['Points', `-₹${loyDisc.toLocaleString()}`]] : []),
                   ['GST', `₹${adjGst.toLocaleString()}`],
                   ['Grand Total', `₹${grand.toLocaleString()}`],
                 ].map(([label, val]) => (
-                  <Col xs={12} sm={6} key={label}>
+                  <Col xs={12} sm={loyDisc > 0 ? 4 : 6} key={label}>
                     <Statistic
                       title={label} value={val}
                       valueStyle={label === 'Grand Total' ? { color: '#1A237E', fontWeight: 700, fontSize: isMobile ? 16 : 20 } : { fontSize: isMobile ? 14 : 16 }}
@@ -850,6 +947,11 @@ export default function NewBill() {
                   </Col>
                 ))}
               </Row>
+              {earnPts > 0 && (
+                <div style={{ marginTop: 10, textAlign: 'right', fontSize: 12, color: '#c9a84c' }}>
+                  ✨ This bill will earn <b>{earnPts}</b> loyalty pts for {customer?.name}
+                </div>
+              )}
             </Card>
           )}
 

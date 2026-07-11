@@ -94,10 +94,31 @@ class Customer(Base):
     member_since    = Column(String(20))
     member_type     = Column(String(20), default="Regular")
     notes           = Column(Text)
+    wallet_object_id     = Column(String(120), nullable=True)
+    wallet_link_sent_at  = Column(DateTime, nullable=True)
     created_at      = Column(DateTime, default=_now)
     updated_at      = Column(DateTime, default=_now, onupdate=_now)
 
     store = relationship("Store", back_populates="customers")
+
+
+# ── Loyalty Program (per store) ───────────────────────────────────────────────
+class LoyaltyProgram(Base):
+    __tablename__ = "loyalty_programs"
+
+    id                 = Column(Integer, primary_key=True, index=True)
+    store_code         = Column(String(20), ForeignKey("stores.store_code", ondelete="CASCADE"),
+                                unique=True, nullable=False, index=True)
+    enabled            = Column(Boolean, default=False)
+    program_name       = Column(String(100), default="Rewards")
+    points_per_rupee   = Column(Float, default=0.01)   # 1 point per ₹100 by default
+    welcome_bonus      = Column(Integer, default=0)
+    min_redeem_points  = Column(Integer, default=50)
+    max_redeem_percent = Column(Float, default=50.0)   # cap redemption to X% of bill
+    terms              = Column(Text, nullable=True)
+    wallet_class_id    = Column(String(120), nullable=True)  # Google Wallet LoyaltyClass id
+    created_at         = Column(DateTime, default=_now)
+    updated_at         = Column(DateTime, default=_now, onupdate=_now)
 
 # ── Products ──────────────────────────────────────────────────────────────────
 class Product(Base):
@@ -151,6 +172,8 @@ class Bill(Base):
     status = Column(String(20), default="Paid")
     notes = Column(Text)
     share_token = Column(String(36), nullable=True, index=True)
+    loyalty_earned_pts   = Column(Integer, default=0)
+    loyalty_redeemed_pts = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     # Relationship
 

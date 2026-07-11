@@ -1,41 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Tooltip, Badge } from 'antd'
-
-const PLATFORMS = {
-  gpay:    { label: 'GPay Business',    url: 'https://business.google.com/',   emoji: '🇬',  color: '#4285F4' },
-  phonepe: { label: 'PhonePe Business', url: 'https://business.phonepe.com/',  emoji: '💜', color: '#5f259f' },
-  both:    { label: 'GPay + PhonePe',   url: null,                             emoji: '💳', color: '#82B8D4' },
-}
-
-let popupRef = { gpay: null, phonepe: null }
-
-function openPopup(platform) {
-  const w = 420, h = Math.min(700, screen.height - 100)
-  const left = Math.max(0, screen.width - w - 20)
-  const top  = 50
-  const opts = `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no`
-
-  if (platform === 'both') {
-    // Open both side by side
-    const halfW = Math.floor((screen.width * 0.45))
-    const gOpts = `width=${halfW},height=${h},left=${screen.width - halfW * 2 - 20},top=${top},resizable=yes,scrollbars=yes`
-    const pOpts = `width=${halfW},height=${h},left=${screen.width - halfW - 10},top=${top},resizable=yes,scrollbars=yes`
-    if (!popupRef.gpay || popupRef.gpay.closed)
-      popupRef.gpay = window.open(PLATFORMS.gpay.url, 'gpay-monitor', gOpts)
-    else popupRef.gpay.focus()
-    setTimeout(() => {
-      if (!popupRef.phonepe || popupRef.phonepe.closed)
-        popupRef.phonepe = window.open(PLATFORMS.phonepe.url, 'phonepe-monitor', pOpts)
-      else popupRef.phonepe.focus()
-    }, 300)
-    return
-  }
-
-  const key = platform
-  if (!popupRef[key] || popupRef[key].closed)
-    popupRef[key] = window.open(PLATFORMS[platform].url, `${platform}-monitor`, opts)
-  else popupRef[key].focus()
-}
+import { Tooltip } from 'antd'
+import { PLATFORMS, openPaymentDashboard } from '../utils/paymentPlatforms'
 
 export default function PaymentMonitor() {
   const [platform, setPlatform] = useState(() => localStorage.getItem('payment_monitor_platform') || null)
@@ -71,7 +36,7 @@ export default function PaymentMonitor() {
             OPEN PAYMENT DASHBOARD
           </div>
           {['gpay','phonepe','both'].map((key) => (
-            <button key={key} onClick={() => { openPopup(key); setOpen(false) }} style={{
+            <button key={key} onClick={() => { openPaymentDashboard(key); setOpen(false) }} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '9px 12px', border: 'none', borderRadius: 12,
               background: platform === key ? 'rgba(130,184,212,0.15)' : 'transparent',
@@ -95,7 +60,7 @@ export default function PaymentMonitor() {
           onClick={() => {
             if (open) { setOpen(false); return }
             if (platform === 'both') { setOpen(true); return }
-            openPopup(platform)
+            openPaymentDashboard(platform)
           }}
           style={{
             width: 56, height: 56, borderRadius: 18,
