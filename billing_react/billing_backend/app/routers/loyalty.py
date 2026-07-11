@@ -56,8 +56,11 @@ def update_program(
     for field, value in changed.items():
         setattr(program, field, value)
 
-    # If enabling and Google Wallet is configured, ensure a LoyaltyClass exists.
-    if changed.get("enabled") and not program.wallet_class_id:
+    # Push class changes (name, terms, etc.) to Google Wallet so every existing
+    # customer card automatically reflects the update. Runs on:
+    #   • first enable (creates the class)
+    #   • every subsequent PATCH while enabled (updates the class)
+    if program.enabled:
         try:
             from app.services.google_wallet import ensure_loyalty_class
             store = db.query(Store).filter(Store.store_code == identity["store_code"]).first()
@@ -65,7 +68,7 @@ def update_program(
             if class_id:
                 program.wallet_class_id = class_id
         except Exception:
-            # Wallet not configured or API failure — feature still works locally.
+            # Wallet not configured on server, or API failure — local flow unaffected.
             pass
 
     db.commit()
