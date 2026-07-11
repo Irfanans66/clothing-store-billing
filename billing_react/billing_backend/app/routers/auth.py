@@ -99,13 +99,31 @@ def register_store(payload: StoreRegisterRequest, db: Session = Depends(get_db))
     Register a new store.
     Creates an isolated tenant — all future data is scoped to this store_code.
     """
+    from sqlalchemy import func
+
     username = payload.owner_user.lower()
+    email    = (payload.email or "").strip()
+    phone    = "".join(ch for ch in (payload.phone or "") if ch.isdigit())  # normalize: digits only
 
     # Username must not already exist as owner or sub-user
     if db.query(Store).filter(Store.owner_user == username).first():
         raise HTTPException(status_code=400, detail="Username already taken.")
     if db.query(StoreUser).filter(StoreUser.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken.")
+
+    # Email must be unique across all stores (case-insensitive)
+    if email and db.query(Store).filter(func.lower(Store.email) == email.lower()).first():
+        raise HTTPException(status_code=400, detail=f"An account with email '{email}' already exists.")
+
+    # Phone must be unique across all stores (compare digits only)
+    if phone:
+        for existing in db.query(Store).filter(Store.phone.isnot(None)).all():
+            existing_phone = "".join(ch for ch in (existing.phone or "") if ch.isdigit())
+            if existing_phone and existing_phone == phone:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"An account with phone '{payload.phone}' already exists."
+                )
 
     store_code = _next_store_code(db)
 
