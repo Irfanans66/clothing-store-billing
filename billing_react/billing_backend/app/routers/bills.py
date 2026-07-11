@@ -121,7 +121,23 @@ def _amount_to_words(amount: float) -> str:
     return result + ' ONLY'
 
 
-def _receipt_design1(bill, raw_items, store) -> bytes:
+def _loyalty_lines(bill, customer):
+    """Return list of (label, value) rows to render on receipts. Empty when no loyalty on this bill."""
+    earned  = int(getattr(bill, "loyalty_earned_pts", 0) or 0)
+    redeemed = int(getattr(bill, "loyalty_redeemed_pts", 0) or 0)
+    if earned == 0 and redeemed == 0:
+        return []
+    lines = []
+    if redeemed > 0:
+        lines.append(("Points Redeemed", f"-{redeemed} pts (-Rs.{redeemed})"))
+    if earned > 0:
+        lines.append(("Points Earned", f"+{earned} pts"))
+    if customer is not None:
+        lines.append(("Balance Points", f"{int(customer.loyalty_pts or 0)} pts"))
+    return lines
+
+
+def _receipt_design1(bill, raw_items, store, customer=None) -> bytes:
     """Design 1 — Sales Invoice: rounded border, red store name, blue header, colored item table."""
     from reportlab.pdfgen import canvas as rc
     from reportlab.lib.units import mm
@@ -254,9 +270,13 @@ def _receipt_design1(bill, raw_items, store) -> bytes:
         except Exception:
             pass
 
+    earned_pts   = int(getattr(bill, 'loyalty_earned_pts', 0) or 0)
+    redeemed_pts = int(getattr(bill, 'loyalty_redeemed_pts', 0) or 0)
+    balance_pts  = int(customer.loyalty_pts or 0) if customer is not None else 0
     c.setStrokeColorRGB(0, 0, 0); c.setLineWidth(0.5)
     col_w = W / 2 - pad
-    for lbl, val in [('Bill Points', '0.00'), ('Used Point', '0'), ('Used Amt', '0'), ('Balance Points', '0.00')]:
+    for lbl, val in [('Bill Points', f'{earned_pts}'), ('Used Point', f'{redeemed_pts}'),
+                     ('Used Amt', f'{redeemed_pts}'), ('Balance Points', f'{balance_pts}')]:
         c.rect(pad, y - 4 * mm, col_w, 4 * mm)
         c.rect(pad + col_w, y - 4 * mm, W - pad * 2 - col_w, 4 * mm)
         c.setFillColorRGB(0.85, 0, 0); c.setFont('Courier-Bold', 7); c.drawString(pad + 1 * mm, y - 3 * mm, lbl)
@@ -267,7 +287,7 @@ def _receipt_design1(bill, raw_items, store) -> bytes:
     return buf.getvalue()
 
 
-def _receipt_design2(bill, raw_items, store) -> bytes:
+def _receipt_design2(bill, raw_items, store, customer=None) -> bytes:
     """Design 2 — Dark header, per-item discount rows, MRP total, payment details table."""
     from reportlab.pdfgen import canvas as rc
     from reportlab.lib.units import mm
@@ -376,6 +396,13 @@ def _receipt_design2(bill, raw_items, store) -> bytes:
         c.setFillColorRGB(*(0.8, 0, 0) if red else (0, 0, 0.65)); c.setFont('Courier-Bold', 7.5)
         c.drawString(pad, y, lbl)
         c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 7.5); c.drawRightString(W - pad, y, val); y -= 4 * mm
+    loyalty_rows = _loyalty_lines(bill, customer)
+    if loyalty_rows:
+        c.setStrokeColorRGB(0.7, 0.7, 0.7); c.setDash(3, 2)
+        c.line(pad, y + 1 * mm, W - pad, y + 1 * mm); c.setDash()
+        for lbl, val in loyalty_rows:
+            c.setFillColorRGB(0.6, 0.35, 0); c.setFont('Courier-Bold', 7.5); c.drawString(pad, y, lbl)
+            c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 7.5); c.drawRightString(W - pad, y, val); y -= 4 * mm
     y -= 2 * mm
 
     try:
@@ -403,7 +430,7 @@ def _receipt_design2(bill, raw_items, store) -> bytes:
     return buf.getvalue()
 
 
-def _receipt_design3(bill, raw_items, store) -> bytes:
+def _receipt_design3(bill, raw_items, store, customer=None) -> bytes:
     """Design 3 — BILL header bar, logo placeholder, red item headers, totals & payment boxes."""
     from reportlab.pdfgen import canvas as rc
     from reportlab.lib.units import mm
@@ -511,6 +538,13 @@ def _receipt_design3(bill, raw_items, store) -> bytes:
         c.setFillColorRGB(0, 0, 0.7); c.setFont('Courier-Bold', 9)
         c.drawCentredString(W / 2, y, f'You Saved : ₹ {saved:.2f}'); y -= 5 * mm
 
+    loyalty_rows = _loyalty_lines(bill, customer)
+    if loyalty_rows:
+        for lbl, val in loyalty_rows:
+            c.setFillColorRGB(0.6, 0.35, 0); c.setFont('Courier-Bold', 8); c.drawString(pad, y, lbl)
+            c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 8); c.drawRightString(W - pad, y, val); y -= 4 * mm
+        y -= 1 * mm
+
     upi_id = (store.upi_id or '').strip() if store else ''
     if upi_id:
         try:
@@ -539,7 +573,7 @@ def _receipt_design3(bill, raw_items, store) -> bytes:
     return buf.getvalue()
 
 
-def _receipt_design4(bill, raw_items, store) -> bytes:
+def _receipt_design4(bill, raw_items, store, customer=None) -> bytes:
     """Design 4 — Tax Invoice: large blue store name, GST breakdown table, big total."""
     from reportlab.pdfgen import canvas as rc
     from reportlab.lib.units import mm
@@ -630,6 +664,13 @@ def _receipt_design4(bill, raw_items, store) -> bytes:
     c.drawString(pad, y, 'Total')
     c.drawRightString(W - pad, y, f'₹ {grand:.2f}'); y -= 9 * mm
 
+    loyalty_rows = _loyalty_lines(bill, customer)
+    if loyalty_rows:
+        for lbl, val in loyalty_rows:
+            c.setFillColorRGB(0.6, 0.35, 0); c.setFont('Courier-Bold', 8); c.drawString(pad, y, lbl)
+            c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 8); c.drawRightString(W - pad, y, val); y -= 4 * mm
+        y -= 2 * mm
+
     upi_id = (store.upi_id or '').strip() if store else ''
     if upi_id:
         try:
@@ -652,16 +693,16 @@ def _receipt_design4(bill, raw_items, store) -> bytes:
     return buf.getvalue()
 
 
-def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> bytes:
+def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch", customer=None) -> bytes:
     """Generate receipt PDF bytes. Routes to design templates or thermal formats."""
     if paper_size == "design1":
-        return _receipt_design1(bill, raw_items, store)
+        return _receipt_design1(bill, raw_items, store, customer)
     if paper_size == "design2":
-        return _receipt_design2(bill, raw_items, store)
+        return _receipt_design2(bill, raw_items, store, customer)
     if paper_size == "design3":
-        return _receipt_design3(bill, raw_items, store)
+        return _receipt_design3(bill, raw_items, store, customer)
     if paper_size == "design4":
-        return _receipt_design4(bill, raw_items, store)
+        return _receipt_design4(bill, raw_items, store, customer)
 
     try:
         from reportlab.pdfgen import canvas as rl_canvas
@@ -679,12 +720,13 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
     W = (58 if is_2inch else 80) * mm
     buf = io.BytesIO()
 
+    loyalty_extra_mm = 5 * len(_loyalty_lines(bill, customer))
     if is_2inch:
-        H = (65 + len(raw_items) * 11 + 45 + (qr_size_mm + 18 if has_qr else 0)) * mm
+        H = (65 + len(raw_items) * 11 + 45 + loyalty_extra_mm + (qr_size_mm + 18 if has_qr else 0)) * mm
     elif is_bold:
-        H = (82 + len(raw_items) * 14 + 58 + (qr_size_mm + 22 if has_qr else 0)) * mm
+        H = (82 + len(raw_items) * 14 + 58 + loyalty_extra_mm + (qr_size_mm + 22 if has_qr else 0)) * mm
     else:
-        H = (50 + len(raw_items) * 9 + 38 + (qr_size_mm + 14 if has_qr else 0)) * mm
+        H = (50 + len(raw_items) * 9 + 38 + loyalty_extra_mm + (qr_size_mm + 14 if has_qr else 0)) * mm
 
     c   = rl_canvas.Canvas(buf, pagesize=(W, H))
     y   = H - 6 * mm
@@ -793,6 +835,11 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
             rw("BALANCE DUE", f"Rs.{abs(bill.change_amt):.0f}", bold=True, sz=12)
         if bill.notes:
             lft(f"Note: {bill.notes}", sz=9)
+        loyalty_rows = _loyalty_lines(bill, customer)
+        if loyalty_rows:
+            thick_line()
+            for lbl, val in loyalty_rows:
+                rw(lbl, val, sz=10)
         thick_line()
         ctr("** THANK YOU! VISIT AGAIN **", "Courier-Bold", 11)
         ctr("Exchange within 7 days with receipt", "Courier", 8)
@@ -812,6 +859,11 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch") -> 
             rw("Balance Due", f"Rs.{abs(bill.change_amt):.0f}", bold=True)
         if bill.notes:
             lft(f"Note: {bill.notes}", sz=7)
+        loyalty_rows = _loyalty_lines(bill, customer)
+        if loyalty_rows:
+            dash()
+            for lbl, val in loyalty_rows:
+                rw(lbl, val)
         dash()
         ctr("* Thank You! Visit Again *", "Courier-Bold", 8)
         ctr("Exchange within 7 days with receipt", "Courier", 6)
@@ -1084,8 +1136,14 @@ def get_public_receipt(
     ).fetchall()
 
     store = db.query(Store).filter(Store.store_code == bill.store_code).first()
+    customer = None
+    if bill.customer_id and bill.customer_id != "WALKIN":
+        customer = db.query(Customer).filter(
+            Customer.store_code == bill.store_code,
+            Customer.customer_id == bill.customer_id,
+        ).first()
 
-    pdf_bytes = _generate_receipt_pdf(bill, raw_items, store, paper_size=paper)
+    pdf_bytes = _generate_receipt_pdf(bill, raw_items, store, paper_size=paper, customer=customer)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -1175,7 +1233,13 @@ def get_receipt_pdf(
     ).fetchall()
 
     store = db.query(Store).filter(Store.store_code == sc).first()
-    pdf_bytes = _generate_receipt_pdf(bill, raw_items, store, paper_size=paper)
+    customer = None
+    if bill.customer_id and bill.customer_id != "WALKIN":
+        customer = db.query(Customer).filter(
+            Customer.store_code == sc,
+            Customer.customer_id == bill.customer_id,
+        ).first()
+    pdf_bytes = _generate_receipt_pdf(bill, raw_items, store, paper_size=paper, customer=customer)
 
     return Response(
         content=pdf_bytes,
