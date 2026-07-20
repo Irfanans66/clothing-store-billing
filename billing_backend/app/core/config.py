@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./billing.db"
     SECRET_KEY: str = "dev-secret-change-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 days
 
     SUPER_ADMIN_USERNAME: str = "superadmin"
     SUPER_ADMIN_PASSWORD: str = "Super@Admin2024"
