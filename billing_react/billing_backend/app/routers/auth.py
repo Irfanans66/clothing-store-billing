@@ -136,6 +136,7 @@ def register_store(payload: StoreRegisterRequest, db: Session = Depends(get_db))
         phone=payload.phone,
         address=payload.address,
         gstin=payload.gstin or "",
+        country=payload.country or "India",
     )
     db.add(new_store)
     db.commit()

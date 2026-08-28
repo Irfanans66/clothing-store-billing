@@ -6,10 +6,12 @@ import {
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { getDailySales, getSalesByCategory, getSalesByPayment, getTopProducts, getGstSummary } from '../api/client'
+import { useCurrency } from '../utils/currency'
 
 const { Title } = Typography
 
 export default function Reports() {
+  const { sym } = useCurrency()
   const [daily, setDaily] = useState([])
   const [byCategory, setByCategory] = useState([])
   const [byPayment, setByPayment] = useState([])
@@ -27,10 +29,10 @@ export default function Reports() {
   const gstCols = [
     { title: 'GST Rate %', dataIndex: 'gst_pct', key: 'gst_pct' },
     { title: 'Line Items', dataIndex: 'line_items', key: 'line_items' },
-    { title: 'Taxable Value (₹)', dataIndex: 'taxable_value', key: 'taxable_value',
-      render: (v) => `₹${Math.round(v).toLocaleString()}` },
-    { title: 'GST Collected (₹)', dataIndex: 'gst_collected', key: 'gst_collected',
-      render: (v) => `₹${Math.round(v).toLocaleString()}` },
+    { title: `Taxable Value (${sym})`, dataIndex: 'taxable_value', key: 'taxable_value',
+      render: (v) => `${sym}${Math.round(v).toLocaleString()}` },
+    { title: `GST Collected (${sym})`, dataIndex: 'gst_collected', key: 'gst_collected',
+      render: (v) => `${sym}${Math.round(v).toLocaleString()}` },
   ]
 
   const noData = <p style={{ color: '#aaa', textAlign: 'center', padding: 32 }}>No data yet</p>
@@ -48,7 +50,7 @@ export default function Reports() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="category" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                  <Tooltip formatter={(v) => `${sym}${Number(v).toLocaleString()}`} />
                   <Bar dataKey="revenue" fill="#3949AB" radius={[4,4,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -64,7 +66,7 @@ export default function Reports() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="payment_mode" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                  <Tooltip formatter={(v) => `${sym}${Number(v).toLocaleString()}`} />
                   <Bar dataKey="revenue" fill="#00897B" radius={[4,4,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -80,7 +82,7 @@ export default function Reports() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                  <Tooltip formatter={(v) => `${sym}${Number(v).toLocaleString()}`} />
                   <Line type="monotone" dataKey="revenue" stroke="#1A237E" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>

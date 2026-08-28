@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react'
-import { Card, Tabs, Form, Input, Button, message, Typography, Alert, Radio, Switch, InputNumber } from 'antd'
+import { Card, Tabs, Form, Input, Button, message, Typography, Alert, Radio, Switch, InputNumber, Select } from 'antd'
 import { getStoreProfile, updateStoreProfile, getLoyaltyProgram, updateLoyaltyProgram } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { PLATFORMS, openPaymentDashboard } from '../utils/paymentPlatforms'
+import { COUNTRIES, getCurrencyInfo, useCurrency } from '../utils/currency'
 
 const { Title, Text } = Typography
 
 function UpiQrPreview({ upiId, storeName }) {
+  const { sym } = useCurrency()
   if (!upiId) return null
   const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(storeName)}&am=100&cu=INR&tn=Demo`
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(upiUrl)}`
@@ -14,14 +16,15 @@ function UpiQrPreview({ upiId, storeName }) {
     <div style={{ textAlign: 'center', marginTop: 16 }}>
       <img src={qrSrc} alt="UPI QR" width={160} height={160}
         style={{ border: '1px solid #eee', borderRadius: 8 }} />
-      <div style={{ fontSize: 12, color: '#555', marginTop: 6 }}>Demo QR (₹100) — real receipt will show actual bill amount</div>
+      <div style={{ fontSize: 12, color: '#555', marginTop: 6 }}>Demo QR ({sym}100) — real receipt will show actual bill amount</div>
       <div style={{ fontSize: 11, color: '#888' }}>{upiId}</div>
     </div>
   )
 }
 
 export default function Settings() {
-  const { role, storeName } = useAuthStore()
+  const { role, storeName, setAuth } = useAuthStore()
+  const { sym } = useCurrency()
   const [profile, setProfile] = useState(null)
   const [infoForm] = Form.useForm()
   const [upiForm] = Form.useForm()
@@ -43,6 +46,7 @@ export default function Settings() {
         infoForm.setFieldsValue(p)
         upiForm.setFieldValue('upi_id', p.upi_id || '')
         setPreviewUpi(p.upi_id || '')
+        if (p.country) setAuth({ country: p.country })
       })
       .catch(() => {})
     getLoyaltyProgram()
@@ -82,6 +86,7 @@ export default function Settings() {
     setSaving(true)
     try {
       await updateStoreProfile(values)
+      if (values.country) setAuth({ country: values.country })
       message.success('Store info updated!')
     } catch (err) { message.error(err.message) }
     finally { setSaving(false) }
@@ -113,6 +118,24 @@ export default function Settings() {
                   <Form.Item name="phone" label="Phone"><Input /></Form.Item>
                   <Form.Item name="gstin" label="GSTIN"><Input /></Form.Item>
                   <Form.Item name="address" label="Address"><Input.TextArea rows={2} /></Form.Item>
+                  <Form.Item
+                    name="country"
+                    label="🌍 Country & Currency"
+                    extra={(() => {
+                      const val = infoForm.getFieldValue('country') || 'India'
+                      const info = getCurrencyInfo(val)
+                      return `Currency: ${info.currency} (${info.symbol})`
+                    })()}
+                  >
+                    <Select
+                      showSearch
+                      optionFilterProp="label"
+                      options={COUNTRIES.map(c => ({
+                        value: c.name,
+                        label: `${c.name} — ${c.symbol} ${c.currency}`,
+                      }))}
+                    />
+                  </Form.Item>
                   <Button type="primary" htmlType="submit" loading={saving}>Save Store Info</Button>
                 </Form>
               ),
@@ -277,7 +300,7 @@ export default function Settings() {
                   <Alert
                     type="info" showIcon style={{ marginBottom: 20 }}
                     message="Loyalty Rewards Program"
-                    description="Reward repeat customers with points on every bill. Points can be redeemed as ₹ discount (1 point = ₹1). If Google Wallet is enabled on the server, customers will get a Google Wallet card link on WhatsApp."
+                    description={`Reward repeat customers with points on every bill. Points can be redeemed as ${sym} discount (1 point = ${sym}1). If Google Wallet is enabled on the server, customers will get a Google Wallet card link on WhatsApp.`}
                   />
                   <Form
                     form={loyaltyForm}
@@ -302,9 +325,9 @@ export default function Settings() {
                     <Form.Item
                       name="rupees_per_point"
                       label="Points ratio"
-                      extra="Customers earn 1 point per this many rupees spent. E.g. ₹100 → 1 point."
+                      extra={`Customers earn 1 point per this many ${sym} spent. E.g. ${sym}100 → 1 point.`}
                     >
-                      <InputNumber min={1} max={10000} step={10} style={{ width: 200 }} addonBefore="₹" addonAfter="= 1 point" />
+                      <InputNumber min={1} max={10000} step={10} style={{ width: 200 }} addonBefore={sym} addonAfter="= 1 point" />
                     </Form.Item>
                     <Form.Item
                       name="welcome_bonus"

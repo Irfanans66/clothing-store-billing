@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Avatar, Typography, Button, Dropdown, Tag, Space, Grid } from 'antd'
 import {
@@ -8,6 +8,7 @@ import {
   MenuFoldOutlined, MenuUnfoldOutlined, QuestionCircleOutlined, PlusOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../store/authStore'
+import { getStoreProfile } from '../api/client'
 import OfflineBanner from './OfflineBanner'
 import PaymentMonitor from './PaymentMonitor'
 
@@ -266,8 +267,16 @@ function NewBillFAB({ onClick }) {
 export default function AppLayout() {
   const navigate  = useNavigate()
   const location  = useLocation()
-  const { role, storeName, username, logout } = useAuthStore()
+  const { role, storeName, username, logout, setAuth } = useAuthStore()
   const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    if (role && role !== 'SuperAdmin') {
+      getStoreProfile()
+        .then(p => { if (p?.country) setAuth({ country: p.country }) })
+        .catch(() => {})
+    }
+  }, [role])
 
   const screens  = useBreakpoint()
   const isMobile = !screens.md   // true when < 768 px

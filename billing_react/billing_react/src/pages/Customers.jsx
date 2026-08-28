@@ -5,6 +5,7 @@ import { SearchOutlined, UserAddOutlined, EyeOutlined, WhatsAppOutlined, DollarO
 import { getCustomers, createCustomer, updateCustomer, recordCreditPayment, getLoyaltyProgram, resendWalletLink } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
+import { useCurrency } from '../utils/currency'
 
 const { Title, Text } = Typography
 const { useBreakpoint } = Grid
@@ -32,6 +33,7 @@ export default function Customers() {
   const { storeName } = useAuthStore()
   const screens  = useBreakpoint()
   const isMobile = !screens.md
+  const { sym } = useCurrency()
 
   useEffect(() => { getLoyaltyProgram().then(setLoyaltyProgram).catch(() => {}) }, [])
 
@@ -91,7 +93,7 @@ export default function Customers() {
     setPayLoading(true)
     try {
       await recordCreditPayment(payTarget.customer_id, payAmount, payMode)
-      message.success(`₹${payAmount} payment recorded for ${payTarget.name}`)
+      message.success(`${sym}${payAmount} payment recorded for ${payTarget.name}`)
       setPayModal(false); setPayTarget(null); setPayAmount(0)
       load(search)
     } catch (err) { message.error(err.message) }
@@ -112,7 +114,7 @@ export default function Customers() {
     const msg =
       `Dear ${cust.name},\n\n` +
       `This is a reminder from *${storeName || 'our store'}*.\n\n` +
-      `You have an outstanding balance of *₹${due}* on your account.\n\n` +
+      `You have an outstanding balance of *${sym}${due}* on your account.\n\n` +
       `Kindly visit us or make the payment at your earliest convenience.\n\n` +
       `Thank you! 🙏`
     const url = `https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`
@@ -143,13 +145,13 @@ export default function Customers() {
     },
     {
       title: 'Total Purchase', dataIndex: 'total_purchase', key: 'total_purchase', width: 120,
-      render: (v) => <Text strong>₹{Math.round(v || 0).toLocaleString()}</Text>,
+      render: (v) => <Text strong>{sym}{Math.round(v || 0).toLocaleString()}</Text>,
       sorter: (a, b) => (a.total_purchase || 0) - (b.total_purchase || 0),
     },
     {
       title: 'Outstanding', dataIndex: 'credit_balance', key: 'credit_balance', width: 110,
       render: (v) => v > 0
-        ? <Tag color="red">₹{Math.round(v).toLocaleString()}</Tag>
+        ? <Tag color="red">{sym}{Math.round(v).toLocaleString()}</Tag>
         : <Tag color="green">Clear</Tag>,
       sorter: (a, b) => (a.credit_balance || 0) - (b.credit_balance || 0),
     },
@@ -225,7 +227,7 @@ export default function Customers() {
       <Row gutter={8} style={{ marginBottom: 12 }}>
         {[
           { label: 'Total', value: totalCustomers, color: undefined },
-          { label: 'Outstanding', value: `₹${Math.round(totalOutstanding).toLocaleString()}`, color: totalOutstanding > 0 ? '#ff7875' : '#95de64' },
+          { label: 'Outstanding', value: `${sym}${Math.round(totalOutstanding).toLocaleString()}`, color: totalOutstanding > 0 ? '#ff7875' : '#95de64' },
           { label: 'With Dues', value: withDues, color: withDues > 0 ? '#ffc069' : '#95de64' },
         ].map(({ label, value, color }) => (
           <Col xs={8} key={label}>
@@ -293,12 +295,12 @@ export default function Customers() {
                 <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                   <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: '4px 10px', flex: 1, textAlign: 'center' }}>
                     <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginBottom: 1 }}>Purchased</div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#95de64' }}>₹{Math.round(c.total_purchase || 0).toLocaleString()}</div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#95de64' }}>{sym}{Math.round(c.total_purchase || 0).toLocaleString()}</div>
                   </div>
                   <div style={{ background: c.credit_balance > 0 ? 'rgba(255,77,79,0.12)' : 'rgba(255,255,255,0.05)', borderRadius: 8, padding: '4px 10px', flex: 1, textAlign: 'center' }}>
                     <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginBottom: 1 }}>Outstanding</div>
                     <div style={{ fontWeight: 700, fontSize: 14, color: c.credit_balance > 0 ? '#ff7875' : '#95de64' }}>
-                      {c.credit_balance > 0 ? `₹${Math.round(c.credit_balance).toLocaleString()}` : 'Clear'}
+                      {c.credit_balance > 0 ? `${sym}${Math.round(c.credit_balance).toLocaleString()}` : 'Clear'}
                     </div>
                   </div>
                 </div>
@@ -358,11 +360,11 @@ export default function Customers() {
           <div>
             <Alert
               type="warning" showIcon style={{ marginBottom: 16 }}
-              message={`Outstanding balance: ₹${Math.round(payTarget.credit_balance).toLocaleString()}`}
+              message={`Outstanding balance: ${sym}${Math.round(payTarget.credit_balance).toLocaleString()}`}
             />
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <div>
-                <Text strong>Amount Received (₹)</Text>
+                <Text strong>Amount Received ({sym})</Text>
                 <InputNumber
                   style={{ width: '100%', marginTop: 6 }}
                   min={1} max={Math.round(payTarget.credit_balance)}

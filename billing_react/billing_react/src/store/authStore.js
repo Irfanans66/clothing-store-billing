@@ -9,6 +9,7 @@ export const useAuthStore = create(
       storeCode: null,
       storeName: null,
       username: null,
+      country: 'India',
       darkMode: false,
 
       setAuth: (payload) => set({ ...payload }),

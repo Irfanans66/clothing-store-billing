@@ -16,6 +16,7 @@ import {
 } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { useOfflineStore } from '../store/offlineStore'
+import { useCurrency } from '../utils/currency'
 import { printPdfWithAuth } from '../utils/pdf'
 import GPayButton from '../components/GPayButton'
 import UpiQrCode from '../components/UpiQrCode'
@@ -31,13 +32,13 @@ const CATEGORIES    = ['Shirts','T-Shirts','Jeans','Trousers','Kurtis','Sarees',
   'Jackets','Sweaters','Suits','Kids Wear','Accessories','Other']
 const GST_RATES     = [0, 5, 12, 18, 28]
 
-function buildWhatsAppMsg(bill, storeName, storeProfile, receiptUrl) {
+function buildWhatsAppMsg(bill, storeName, storeProfile, receiptUrl, sym = '₹') {
   const { phone = '', address = '', gstin = '', upi_id = '' } = storeProfile || {}
   const sep = '─'.repeat(26)
   let msg = `🧾 *${storeName}*\n${sep}\n`
   if (address) msg += `📍 ${address}\n`
   if (phone)   msg += `📞 ${phone}${gstin ? `  GST: ${gstin}` : ''}\n`
-  msg += `${sep}\n📄 Bill: *${bill.bill_no}*  |  ₹${Math.round(bill.grand_total)}\n`
+  msg += `${sep}\n📄 Bill: *${bill.bill_no}*  |  ${sym}${Math.round(bill.grand_total)}\n`
   msg += `📅 ${bill.bill_date}  ${bill.bill_time}\n`
   if (receiptUrl) {
     msg += `${sep}\n📥 *View/Download Receipt:*\n${receiptUrl}\n`
@@ -49,7 +50,7 @@ function buildWhatsAppMsg(bill, storeName, storeProfile, receiptUrl) {
     msg += `${sep}\n🎁 *Save your loyalty card to Google Wallet:*\n${bill.wallet_link}\n`
   }
   if (upi_id) {
-    msg += `${sep}\n💳 Pay via UPI: *${upi_id}*\nAmount: ₹${Math.round(bill.grand_total)}\n`
+    msg += `${sep}\n💳 Pay via UPI: *${upi_id}*\nAmount: ${sym}${Math.round(bill.grand_total)}\n`
   }
   msg += `${sep}\n🙏 *Thank you! Visit again.*\n_Exchange within 7 days with receipt_`
   return msg
@@ -59,6 +60,7 @@ export default function NewBill() {
   const { storeName } = useAuthStore()
   const { isOnline, cachedProducts, cachedCustomers, cacheProducts, cacheCustomers, addPendingBill } = useOfflineStore()
   const screens = useBreakpoint()
+  const { sym } = useCurrency()
   const isMobile = !screens.md
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -409,7 +411,7 @@ export default function NewBill() {
     {
       title: 'Disc', key: 'd', width: 130,
       render: (_, rec) => (
-        <Tooltip title="Extra discount for this item — choose % or ₹ (per unit)">
+        <Tooltip title={`Extra discount for this item — choose % or ${sym} (per unit)`}>
           <Space.Compact size="small">
             <Select
               size="small"
@@ -420,7 +422,7 @@ export default function NewBill() {
               style={{ width: 55 }}
             >
               <Select.Option value="%">%</Select.Option>
-              <Select.Option value="Rs.">₹</Select.Option>
+              <Select.Option value="Rs.">{sym}</Select.Option>
             </Select>
             <InputNumber
               min={0}
@@ -438,11 +440,11 @@ export default function NewBill() {
     },
     {
       title: 'Price', dataIndex: 'selling_price', key: 'p', width: 70,
-      render: (v) => `₹${v}`,
+      render: (v) => `${sym}${v}`,
     },
     {
       title: 'Sub', dataIndex: 'subtotal', key: 'sub', width: 75,
-      render: (v) => `₹${Math.round(v)}`,
+      render: (v) => `${sym}${Math.round(v)}`,
     },
     {
       title: '', key: 'del', width: 36,
@@ -462,7 +464,7 @@ export default function NewBill() {
             {rec.product_name}
             {rec.item_id?.startsWith('CUSTOM') && <Tag color="orange" style={{ marginLeft: 4, fontSize: 10 }}>Custom</Tag>}
           </div>
-          <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>{rec.size} · ₹{rec.selling_price} each</div>
+          <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>{rec.size} · {sym}{rec.selling_price} each</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <InputNumber min={1} value={rec.qty}
               style={{ width: 70 }} size="middle"
@@ -482,7 +484,7 @@ export default function NewBill() {
                 style={{ width: 58 }}
               >
                 <Select.Option value="%">%</Select.Option>
-                <Select.Option value="Rs.">₹</Select.Option>
+                <Select.Option value="Rs.">{sym}</Select.Option>
               </Select>
               <InputNumber
                 min={0}
@@ -501,7 +503,7 @@ export default function NewBill() {
       title: 'Amt', key: 'amt', width: 80,
       render: (_, rec) => (
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontWeight: 800, fontSize: 16, color: '#1A237E' }}>₹{Math.round(rec.subtotal)}</div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#1A237E' }}>{sym}{Math.round(rec.subtotal)}</div>
           <Button type="text" danger icon={<DeleteOutlined />} style={{ marginTop: 4, padding: '4px 8px' }}
             onClick={() => setCart((p) => p.filter((i) => i._key !== rec._key))}>Del</Button>
         </div>
@@ -582,10 +584,10 @@ export default function NewBill() {
                   {String(it.product_name || '').slice(0, 22)}
                   <span style={{ color: tk.colorTextSecondary, fontWeight: 400 }}> ({it.size})</span>
                 </span>
-                <span style={{ color: tk.colorText, fontWeight: 700 }}>₹{Math.round(it.subtotal)}</span>
+                <span style={{ color: tk.colorText, fontWeight: 700 }}>{sym}{Math.round(it.subtotal)}</span>
               </div>
               <div style={{ color: tk.colorTextSecondary, fontSize: 11 }}>
-                {it.qty} × ₹{it.selling_price}
+                {it.qty} × {sym}{it.selling_price}
               </div>
             </div>
           ))}
@@ -596,9 +598,9 @@ export default function NewBill() {
           padding: '12px 18px', background: tk.colorBgElevated,
           borderTop: `1px solid ${tk.colorBorderSecondary}`,
         }}>
-          {bill.discount > 0 && row('Discount', `-₹${Math.round(bill.discount)}`, { valueColor: '#2e7d32', bold: true })}
+          {bill.discount > 0 && row('Discount', `-${sym}${Math.round(bill.discount)}`, { valueColor: '#2e7d32', bold: true })}
           {bill.loyalty_redeemed_pts > 0 && row(`Points Redeemed`, `-${bill.loyalty_redeemed_pts} pts`, { valueColor: '#c9a84c', bold: true })}
-          {row('GST', `₹${Math.round(bill.gst_total)}`)}
+          {row('GST', `${sym}${Math.round(bill.gst_total)}`)}
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             borderTop: `2px solid ${tk.colorBorderSecondary}`, marginTop: 8, paddingTop: 8,
@@ -608,7 +610,7 @@ export default function NewBill() {
               fontWeight: 800, fontSize: 20,
               background: 'linear-gradient(135deg, #1A237E, #3949AB)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            }}>₹{Math.round(bill.grand_total)}</span>
+            }}>{sym}{Math.round(bill.grand_total)}</span>
           </div>
           {bill.loyalty_earned_pts > 0 && (
             <div style={{
@@ -624,8 +626,8 @@ export default function NewBill() {
         {/* ── Payment ── */}
         <div style={{ padding: '12px 18px', background: tk.colorBgContainer }}>
           {row('Payment Mode', bill.payment_mode, { bold: true })}
-          {row('Amount Paid', `₹${Math.round(bill.amount_paid)}`, { bold: true })}
-          {bill.change_amt > 0 && row('Change', `₹${Math.round(bill.change_amt)}`, { valueColor: '#2e7d32', bold: true })}
+          {row('Amount Paid', `${sym}${Math.round(bill.amount_paid)}`, { bold: true })}
+          {bill.change_amt > 0 && row('Change', `${sym}${Math.round(bill.change_amt)}`, { valueColor: '#2e7d32', bold: true })}
           {bill.change_amt < 0 && (
             <div style={{
               marginTop: 8, background: '#ffebee',
@@ -633,7 +635,7 @@ export default function NewBill() {
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
               <span style={{ color: '#c62828', fontWeight: 700 }}>Balance Due</span>
-              <span style={{ color: '#c62828', fontWeight: 800, fontSize: 15 }}>₹{Math.round(Math.abs(bill.change_amt))}</span>
+              <span style={{ color: '#c62828', fontWeight: 800, fontSize: 15 }}>{sym}{Math.round(Math.abs(bill.change_amt))}</span>
             </div>
           )}
         </div>
@@ -660,7 +662,7 @@ export default function NewBill() {
               />
             </div>
             <div style={{ fontSize: 12, color: tk.colorTextSecondary, marginTop: 8, fontWeight: 600 }}>
-              ₹{Math.round(bill.grand_total)} · {upiId}
+              {sym}{Math.round(bill.grand_total)} · {upiId}
             </div>
           </div>
         )}
@@ -734,7 +736,7 @@ export default function NewBill() {
                         {c.phone && <Text type="secondary" style={{ fontSize: 12 }}>{c.phone}</Text>}
                         <Tag color="blue" style={{ fontSize: 11, margin: 0 }}>{c.member_type}</Tag>
                         {c.credit_balance > 0 && (
-                          <Tag color="red" style={{ fontSize: 11, margin: 0 }}>Due ₹{Math.round(c.credit_balance)}</Tag>
+                          <Tag color="red" style={{ fontSize: 11, margin: 0 }}>Due {sym}{Math.round(c.credit_balance)}</Tag>
                         )}
                       </div>
                     ),
@@ -761,7 +763,7 @@ export default function NewBill() {
                     <Tag style={{ marginLeft: 8 }}>{customer.member_type || 'Walk-in'}</Tag>
                     {(customer.credit_balance > 0) && (
                       <Tag color="red" style={{ marginLeft: 4 }}>
-                        Outstanding: ₹{Math.round(customer.credit_balance)}
+                        Outstanding: {sym}{Math.round(customer.credit_balance)}
                       </Tag>
                     )}
                     {loyaltyProgram?.enabled && custLoyalty && (
@@ -893,7 +895,7 @@ export default function NewBill() {
                       <Text code style={{ fontSize: 11 }}>{p.item_id}</Text>
                       {p.stock_qty <= 2 && <Tag color="red" style={{ marginLeft: 6, fontSize: 10 }}>Low Stock</Tag>}
                     </div>
-                    <Tag color="blue" style={{ fontSize: isMobile ? 14 : 12, padding: '2px 8px' }}>₹{p.selling_price}</Tag>
+                    <Tag color="blue" style={{ fontSize: isMobile ? 14 : 12, padding: '2px 8px' }}>{sym}{p.selling_price}</Tag>
                   </div>
                 ))}
               </div>
@@ -928,13 +930,13 @@ export default function NewBill() {
                   <Col xs={24} sm="auto" style={{ marginBottom: isMobile ? 8 : 0 }}>
                     <Radio.Group value={discType} onChange={(e) => setDiscType(e.target.value)} buttonStyle="solid" size="small">
                       <Radio.Button value="%">% Percent</Radio.Button>
-                      <Radio.Button value="Rs.">₹ Flat</Radio.Button>
+                      <Radio.Button value="Rs.">{sym} Flat</Radio.Button>
                     </Radio.Group>
                   </Col>
                   <Col xs={24} sm="auto">
                     <InputNumber
                       min={0} value={discVal} onChange={setDiscVal}
-                      prefix={discType === '%' ? '%' : '₹'} style={{ width: 140 }}
+                      prefix={discType === '%' ? '%' : sym} style={{ width: 140 }}
                     />
                   </Col>
                 </Row>
@@ -945,7 +947,7 @@ export default function NewBill() {
                 <div style={{ marginTop: 10, background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 8, padding: '12px 14px' }}>
                   <Text strong>🎁 Redeem Loyalty Points</Text>
                   <div style={{ fontSize: 12, color: '#777', marginBottom: 8 }}>
-                    Balance: <b>{custLoyalty.loyalty_pts || 0}</b> pts · 1 pt = ₹1 · Max redeem this bill: {maxRedeemPts} pts
+                    Balance: <b>{custLoyalty.loyalty_pts || 0}</b> pts · 1 pt = {sym}1 · Max redeem this bill: {maxRedeemPts} pts
                     {loyaltyProgram.min_redeem_points > 0 && ` · Min ${loyaltyProgram.min_redeem_points} pts to redeem`}
                   </div>
                   <Row gutter={12} align="middle">
@@ -966,7 +968,7 @@ export default function NewBill() {
                           size="small"
                           onClick={() => setRedeemPts(maxRedeemPts)}
                         >
-                          Redeem All ({maxRedeemPts} pts = ₹{maxRedeemPts})
+                          Redeem All ({maxRedeemPts} pts = {sym}{maxRedeemPts})
                         </Button>
                       </Col>
                     )}
@@ -983,11 +985,11 @@ export default function NewBill() {
 
               <Row gutter={[8, 8]} style={{ marginTop: 14 }}>
                 {[
-                  ['Subtotal', `₹${rawSub.toLocaleString()}`],
-                  ['Discount', `-₹${disc.toLocaleString()}`],
-                  ...(loyDisc > 0 ? [['Points', `-₹${loyDisc.toLocaleString()}`]] : []),
-                  ['GST', `₹${adjGst.toLocaleString()}`],
-                  ['Grand Total', `₹${grand.toLocaleString()}`],
+                  ['Subtotal', `${sym}${rawSub.toLocaleString()}`],
+                  ['Discount', `-${sym}${disc.toLocaleString()}`],
+                  ...(loyDisc > 0 ? [['Points', `-${sym}${loyDisc.toLocaleString()}`]] : []),
+                  ['GST', `${sym}${adjGst.toLocaleString()}`],
+                  ['Grand Total', `${sym}${grand.toLocaleString()}`],
                 ].map(([label, val]) => (
                   <Col xs={12} sm={loyDisc > 0 ? 4 : 6} key={label}>
                     <Statistic
@@ -1024,7 +1026,7 @@ export default function NewBill() {
                 {/* Non-credit: Amount Paid */}
                 {!isCredit && (
                   <Col xs={24} sm={8}>
-                    <div style={{ marginBottom: 4 }}><Text type="secondary">Amount Paid (₹)</Text></div>
+                    <div style={{ marginBottom: 4 }}><Text type="secondary">Amount Paid ({sym})</Text></div>
                     <InputNumber
                       value={amountPaid} onChange={setAmountPaid} min={0} max={grand}
                       style={{ width: '100%' }} size="large"
@@ -1036,7 +1038,7 @@ export default function NewBill() {
                 {isCredit && (
                   <Col xs={24} sm={12}>
                     <div style={{ marginBottom: 4 }}>
-                      <Text type="secondary">Amount on Credit (₹)</Text>
+                      <Text type="secondary">Amount on Credit ({sym})</Text>
                       <Tag color="orange" style={{ marginLeft: 6, fontSize: 10 }}>rest of money</Tag>
                     </div>
                     <InputNumber
@@ -1044,7 +1046,7 @@ export default function NewBill() {
                       onChange={(v) => setCreditAmount(Math.min(grand, Math.max(0, v || 0)))}
                       min={0} max={grand}
                       style={{ width: '100%' }} size="large"
-                      placeholder={`Max ₹${grand}`}
+                      placeholder={`Max ${sym}${grand}`}
                     />
                   </Col>
                 )}
@@ -1060,7 +1062,7 @@ export default function NewBill() {
                           borderRadius: 10, padding: '10px 14px', textAlign: 'center',
                         }}>
                           <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 4 }}>On Credit</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, color: '#e65100' }}>₹{creditAmount.toLocaleString()}</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: '#e65100' }}>{sym}{creditAmount.toLocaleString()}</div>
                         </div>
                       </Col>
                       <Col xs={12}>
@@ -1070,14 +1072,14 @@ export default function NewBill() {
                           borderRadius: 10, padding: '10px 14px', textAlign: 'center',
                         }}>
                           <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 4 }}>Collected Now</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, color: '#2e7d32' }}>₹{upfront.toLocaleString()}</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: '#2e7d32' }}>{sym}{upfront.toLocaleString()}</div>
                         </div>
                       </Col>
                     </Row>
                   ) : (
                     <Statistic
                       title="Change / Balance"
-                      value={`₹${change.toLocaleString()}`}
+                      value={`${sym}${change.toLocaleString()}`}
                       styles={{ content: { color: change >= 0 ? '#2E7D32' : '#C62828' } }}
                     />
                   )}
@@ -1089,7 +1091,7 @@ export default function NewBill() {
                 <Alert
                   type="warning" showIcon
                   icon={<ExclamationCircleOutlined />}
-                  message={`Full credit sale — ₹${creditAmount.toLocaleString()} will be added to customer's outstanding balance`}
+                  message={`Full credit sale — ${sym}${creditAmount.toLocaleString()} will be added to customer's outstanding balance`}
                   style={{ marginTop: 12 }}
                 />
               )}
@@ -1103,7 +1105,7 @@ export default function NewBill() {
                   borderRadius: 12,
                 }}>
                   <Text strong style={{ color: token.colorText }}>
-                    💰 How is ₹{upfront.toLocaleString()} being collected now?
+                    💰 How is {sym}{upfront.toLocaleString()} being collected now?
                   </Text>
                   <div style={{ marginTop: 10 }}>
                     <Radio.Group
@@ -1118,9 +1120,9 @@ export default function NewBill() {
                     </Radio.Group>
                   </div>
                   <div style={{ marginTop: 10, fontSize: 13, color: token.colorTextSecondary }}>
-                    ✅ <Text strong>₹{upfront.toLocaleString()}</Text> via <Text strong>{splitPayMode}</Text>
+                    ✅ <Text strong>{sym}{upfront.toLocaleString()}</Text> via <Text strong>{splitPayMode}</Text>
                     &nbsp;+&nbsp;
-                    <Text strong style={{ color: '#e65100' }}>₹{creditAmount.toLocaleString()}</Text> on credit
+                    <Text strong style={{ color: '#e65100' }}>{sym}{creditAmount.toLocaleString()}</Text> on credit
                   </div>
                 </div>
               )}
@@ -1157,7 +1159,7 @@ export default function NewBill() {
                             UPI ID: <strong>{storeProfile.upi_id}</strong>
                           </div>
                           <div style={{ fontSize: 18, fontWeight: 800, color: '#1A237E', marginBottom: 10 }}>
-                            ₹{grand.toLocaleString()}
+                            {sym}{grand.toLocaleString()}
                           </div>
                           <Button
                             type="primary" size="large"
@@ -1172,7 +1174,7 @@ export default function NewBill() {
                   ) : (
                     <div style={{ padding: '12px 16px', background: '#f6ffed', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ fontWeight: 700, color: '#389e0d', fontSize: 15 }}>
-                        ✅ UPI Payment Confirmed — ₹{grand.toLocaleString()}
+                        ✅ UPI Payment Confirmed — {sym}{grand.toLocaleString()}
                       </div>
                       <Button size="small" type="text" danger onClick={() => setUpiConfirmed(false)}>
                         Undo
@@ -1256,7 +1258,7 @@ export default function NewBill() {
                         const receiptUrl = lastBill.share_token
                           ? getPublicReceiptUrl(lastBill.share_token)
                           : null
-                        const msg = buildWhatsAppMsg(lastBill, storeName, storeProfile, receiptUrl)
+                        const msg = buildWhatsAppMsg(lastBill, storeName, storeProfile, receiptUrl, sym)
                         const phone = lastBill.phone.replace(/\D/g, '')
                         const waPhone = phone.length === 10 ? '91' + phone : phone
                         window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`, '_blank')
@@ -1357,13 +1359,13 @@ export default function NewBill() {
               </Form.Item>
             </Col>
             <Col xs={12}>
-              <Form.Item name="selling_price" label="Selling Price ₹ *" rules={[{ required: true }]}>
-                <InputNumber min={0} style={{ width: '100%' }} prefix="₹" />
+              <Form.Item name="selling_price" label={`Selling Price ${sym} *`} rules={[{ required: true }]}>
+                <InputNumber min={0} style={{ width: '100%' }} prefix={sym} />
               </Form.Item>
             </Col>
             <Col xs={12}>
-              <Form.Item name="mrp" label="MRP ₹">
-                <InputNumber min={0} style={{ width: '100%' }} prefix="₹" />
+              <Form.Item name="mrp" label={`MRP ${sym}`}>
+                <InputNumber min={0} style={{ width: '100%' }} prefix={sym} />
               </Form.Item>
             </Col>
             <Col xs={12}>
@@ -1411,7 +1413,7 @@ export default function NewBill() {
           <div>
             <div style={{ fontSize: 11, color: '#888' }}>{cart.length} item{cart.length > 1 ? 's' : ''} · Grand Total</div>
             <div style={{ fontSize: 22, fontWeight: 800, color: '#1A237E', lineHeight: 1.2 }}>
-              ₹{grand.toLocaleString()}
+              {sym}{grand.toLocaleString()}
             </div>
           </div>
           <Button

@@ -7,6 +7,7 @@ import {
 import { SearchOutlined, PrinterOutlined, RollbackOutlined, FileTextOutlined } from '@ant-design/icons'
 import { getBills, getBill, returnBillItems, getCustomers } from '../api/client'
 import { printPdfWithAuth } from '../utils/pdf'
+import { useCurrency } from '../utils/currency'
 
 const { Title, Text } = Typography
 const { useBreakpoint } = Grid
@@ -28,6 +29,7 @@ export default function BillHistory() {
   })
   const screens  = useBreakpoint()
   const isMobile = !screens.md
+  const { sym } = useCurrency()
   const [custOptions, setCustOptions] = useState([])
   const [custLoading, setCustLoading] = useState(false)
   const custDebounceRef = useRef(null)
@@ -167,7 +169,7 @@ export default function BillHistory() {
     { title: 'Customer', dataIndex: 'customer_name', key: 'customer_name' },
     {
       title: 'Total', dataIndex: 'grand_total', key: 'grand_total',
-      render: (v) => <Text strong>₹{Math.round(v).toLocaleString()}</Text>,
+      render: (v) => <Text strong>{sym}{Math.round(v).toLocaleString()}</Text>,
     },
     {
       title: 'Payment', dataIndex: 'payment_mode', key: 'payment_mode',
@@ -179,12 +181,12 @@ export default function BillHistory() {
     },
     {
       title: 'Paid', dataIndex: 'amount_paid', key: 'amount_paid', width: 100,
-      render: (v) => <Text strong style={{ color: '#389e0d' }}>₹{Math.round(v).toLocaleString()}</Text>,
+      render: (v) => <Text strong style={{ color: '#389e0d' }}>{sym}{Math.round(v).toLocaleString()}</Text>,
     },
     {
       title: 'Balance Due', dataIndex: 'change_amt', key: 'change_amt', width: 110,
       render: (v) => v < 0
-        ? <Tag color="red">₹{Math.abs(Math.round(v)).toLocaleString()}</Tag>
+        ? <Tag color="red">{sym}{Math.abs(Math.round(v)).toLocaleString()}</Tag>
         : <Tag color="green">Paid</Tag>,
     },
     {
@@ -320,7 +322,7 @@ export default function BillHistory() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <span style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>
-                      ₹{Math.round(bill.grand_total).toLocaleString()}
+                      {sym}{Math.round(bill.grand_total).toLocaleString()}
                     </span>
                     <Tag color="blue" style={{ marginLeft: 8, fontSize: 11 }}>{bill.payment_mode}</Tag>
                   </div>
@@ -394,21 +396,21 @@ export default function BillHistory() {
                 { title: 'Product', dataIndex: 'product_name', key: 'product_name' },
                 { title: 'Size', dataIndex: 'size', key: 'size', width: 60 },
                 { title: 'Qty', dataIndex: 'qty', key: 'qty', width: 50 },
-                { title: 'Price', dataIndex: 'selling_price', key: 'selling_price', render: (v) => `₹${v}` },
-                { title: 'Total', dataIndex: 'total', key: 'total', render: (v) => `₹${Math.round(v)}` },
+                { title: 'Price', dataIndex: 'selling_price', key: 'selling_price', render: (v) => `${sym}${v}` },
+                { title: 'Total', dataIndex: 'total', key: 'total', render: (v) => `${sym}${Math.round(v)}` },
               ]}
             />
 
             <Divider />
             <Descriptions size="small" column={2}>
-              <Descriptions.Item label="Subtotal">₹{Math.round(detailBill.subtotal)}</Descriptions.Item>
+              <Descriptions.Item label="Subtotal">{sym}{Math.round(detailBill.subtotal)}</Descriptions.Item>
               {detailBill.discount > 0 && (
-                <Descriptions.Item label="Discount">-₹{Math.round(detailBill.discount)}</Descriptions.Item>
+                <Descriptions.Item label="Discount">-{sym}{Math.round(detailBill.discount)}</Descriptions.Item>
               )}
-              <Descriptions.Item label="GST">₹{Math.round(detailBill.gst_total)}</Descriptions.Item>
+              <Descriptions.Item label="GST">{sym}{Math.round(detailBill.gst_total)}</Descriptions.Item>
               <Descriptions.Item label={<Text strong>Grand Total</Text>}>
                 <Text strong style={{ fontSize: 16, color: '#1A237E' }}>
-                  ₹{Math.round(detailBill.grand_total)}
+                  {sym}{Math.round(detailBill.grand_total)}
                 </Text>
               </Descriptions.Item>
             </Descriptions>
@@ -424,11 +426,11 @@ export default function BillHistory() {
                     <br />
                     {ret.return_items.map((ri) => (
                       <div key={ri.id}>
-                        {ri.product_name} × {ri.return_qty} — ₹{Math.round(ri.refund_subtotal)}
+                        {ri.product_name} × {ri.return_qty} — {sym}{Math.round(ri.refund_subtotal)}
                       </div>
                     ))}
                     <div style={{ marginTop: 4 }}>
-                      <Tag color="orange">Refund: ₹{Math.round(ret.refund_amount)}</Tag>
+                      <Tag color="orange">Refund: {sym}{Math.round(ret.refund_amount)}</Tag>
                       <Tag>{ret.refund_method}</Tag>
                     </div>
                   </Card>
@@ -512,7 +514,7 @@ export default function BillHistory() {
             <Card size="small" style={{ background: '#f6ffed', border: '1px solid #b7eb8f' }}>
               <Text strong>Total Refund: </Text>
               <Text strong style={{ fontSize: 18, color: '#389e0d' }}>
-                ₹{calcRefundTotal().toLocaleString()}
+                {sym}{calcRefundTotal().toLocaleString()}
               </Text>
               <Text type="secondary"> via {refundMethod}</Text>
             </Card>

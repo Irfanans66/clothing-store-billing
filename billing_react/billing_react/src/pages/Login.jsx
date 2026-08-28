@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Form, message, Tabs } from 'antd'
 import { login, registerStore } from '../api/client'
 import { useAuthStore } from '../store/authStore'
+import { COUNTRIES } from '../utils/currency'
 
 const BG   = '#EDE8E2'
 const DARK = 'rgba(163,155,140,0.55)'
@@ -43,6 +44,39 @@ function NeuInput({ icon, placeholder, type = 'text', value, onChange, id }) {
           fontFamily: "'Poppins', sans-serif",
         }}
       />
+    </div>
+  )
+}
+
+// ── Reusable styled select ───────────────────────────────────────────────────
+function NeuSelect({ icon, value, onChange, options }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      background: BG,
+      borderRadius: 14,
+      boxShadow: focused ? `inset 4px 4px 10px ${DARK}, inset -4px -4px 10px ${LITE}` : `3px 3px 8px ${DARK}, -3px -3px 8px ${LITE}`,
+      padding: '12px 16px',
+      marginBottom: 14,
+      transition: 'box-shadow 0.25s',
+    }}>
+      <span style={{ fontSize: 16, color: focused ? BLUE : '#A09890' }}>{icon}</span>
+      <select
+        value={value}
+        onChange={onChange}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          flex: 1, border: 'none', background: 'transparent',
+          outline: 'none', fontSize: 14, color: '#4A4440',
+          fontFamily: "'Poppins', sans-serif", cursor: 'pointer',
+        }}
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -104,7 +138,7 @@ export default function Login() {
   // Register state
   const [reg, setReg] = useState({
     store_name: '', owner_user: '', password: '', confirm_password: '',
-    email: '', phone: '', address: '', gstin: '',
+    email: '', phone: '', address: '', gstin: '', country: 'India',
   })
 
   async function handleLogin() {
@@ -218,6 +252,12 @@ export default function Login() {
               </div>
               <NeuInput icon="📍" placeholder="Address" value={reg.address} onChange={r('address')} />
               <NeuInput icon="🏛️" placeholder="GSTIN (optional)" value={reg.gstin} onChange={r('gstin')} />
+              <NeuSelect
+                icon="🌍"
+                value={reg.country}
+                onChange={r('country')}
+                options={COUNTRIES.map(c => ({ value: c.name, label: `${c.name} (${c.symbol} ${c.currency})` }))}
+              />
               <NeuButton onClick={handleRegister} loading={loading} color={MINT}>Register Store</NeuButton>
             </>
           )}

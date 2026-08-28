@@ -3,6 +3,7 @@ import { Card, Select, InputNumber, Button, Table, Typography, Space, Alert } fr
 import { PrinterOutlined } from '@ant-design/icons'
 import { getProducts, getStoreProfile } from '../api/client'
 import { useAuthStore } from '../store/authStore'
+import { useCurrency } from '../utils/currency'
 import JsBarcode from 'jsbarcode'
 
 const { Title, Text } = Typography
@@ -417,6 +418,7 @@ export default function BarcodeLabels() {
   const [printing, setPrinting]   = useState(false)
   const [storeName, setStoreName] = useState('')
   const { storeName: authStoreName } = useAuthStore()
+  const { sym } = useCurrency()
 
   useEffect(() => {
     const name = authStoreName || ''
@@ -452,7 +454,7 @@ export default function BarcodeLabels() {
     { title: 'Item ID', dataIndex: 'item_id', key: 'item_id', width: 90 },
     { title: 'Product', dataIndex: 'product_name', key: 'product_name', ellipsis: true },
     { title: 'Category', dataIndex: 'category', key: 'category', width: 110 },
-    { title: 'MRP', dataIndex: 'mrp', key: 'mrp', width: 80, render: v => `₹${v}` },
+    { title: 'MRP', dataIndex: 'mrp', key: 'mrp', width: 80, render: v => `${sym}${v}` },
     { title: 'Barcode', dataIndex: 'barcode', key: 'barcode',
       render: v => <Text code style={{ fontSize: 11 }}>{v}</Text> },
     { title: 'Stock', dataIndex: 'stock_qty', key: 'stock_qty', width: 70 },

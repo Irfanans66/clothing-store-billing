@@ -3,6 +3,7 @@ import { Card, Table, Input, Button, Space, Tag, Typography, Modal, Form, Row, C
 import { SearchOutlined, PlusOutlined, BarcodeOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { getProducts, createProduct, updateProduct, adjustStock } from '../api/client'
+import { useCurrency } from '../utils/currency'
 
 const { useBreakpoint } = Grid
 
@@ -24,6 +25,7 @@ export default function Products() {
   const navigate = useNavigate()
   const screens = useBreakpoint()
   const isMobile = !screens.md
+  const { sym } = useCurrency()
 
   async function load() {
     setLoading(true)
@@ -61,9 +63,9 @@ export default function Products() {
     { title: 'Category', dataIndex: 'category', key: 'category',
       render: (v) => v ? <Tag>{v}</Tag> : '-' },
     { title: 'Size', dataIndex: 'size', key: 'size', width: 60 },
-    { title: 'MRP', dataIndex: 'mrp', key: 'mrp', render: (v) => `₹${v}` },
+    { title: 'MRP', dataIndex: 'mrp', key: 'mrp', render: (v) => `${sym}${v}` },
     { title: 'Sell Price', dataIndex: 'selling_price', key: 'selling_price',
-      render: (v) => <Text strong>₹{v}</Text> },
+      render: (v) => <Text strong>{sym}{v}</Text> },
     { title: 'GST%', dataIndex: 'gst_pct', key: 'gst_pct', width: 60 },
     { title: 'Stock', dataIndex: 'stock_qty', key: 'stock_qty', width: 70,
       render: (v, r) => (
@@ -135,7 +137,7 @@ export default function Products() {
               <Select>{SIZE_OPTIONS.map((s) => <Select.Option key={s} value={s}>{s}</Select.Option>)}</Select>
             </Form.Item></Col>
             <Col span={12}><Form.Item name="material" label="Material"><Input /></Form.Item></Col>
-            <Col span={8}><Form.Item name="mrp" label="MRP (₹) *" rules={[{ required: true }]}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={8}><Form.Item name="mrp" label={`MRP (${sym}) *`} rules={[{ required: true }]}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
             <Col span={8}><Form.Item name="selling_price" label="Selling Price *" rules={[{ required: true }]}><InputNumber min={0.01} style={{ width: '100%' }} /></Form.Item></Col>
             <Col span={8}><Form.Item name="gst_pct" label="GST %" initialValue={5}>
               <Select>{GST_RATES.map((g) => <Select.Option key={g} value={g}>{g}%</Select.Option>)}</Select>

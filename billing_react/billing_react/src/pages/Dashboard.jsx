@@ -9,18 +9,12 @@ import {
   getSalesByPayment, getLowStock,
 } from '../api/client'
 import { useAuthStore } from '../store/authStore'
+import { useCurrency } from '../utils/currency'
 
 const { Title, Text } = Typography
 const { useBreakpoint } = Grid
 
 const KPI_COLORS = ['#1A237E', '#2E7D32', '#6A1B9A', '#E65100', '#C62828']
-const KPI_KEYS = [
-  ['total_revenue', 'Total Revenue', (v) => `₹${Number(v).toLocaleString()}`],
-  ['total_bills', 'Total Bills', (v) => v],
-  ['total_customers', 'Customers', (v) => v],
-  ['total_products', 'Products', (v) => v],
-  ['low_stock_count', 'Low Stock ⚠️', (v) => v],
-]
 
 const PERIODS = [
   { label: 'Today', value: 'today' },
@@ -38,6 +32,15 @@ const PERIOD_TITLES = {
 
 export default function Dashboard() {
   const storeName = useAuthStore((s) => s.storeName)
+  const { sym } = useCurrency()
+
+  const KPI_KEYS = [
+    ['total_revenue', 'Total Revenue', (v) => `${sym}${Number(v).toLocaleString()}`],
+    ['total_bills', 'Total Bills', (v) => v],
+    ['total_customers', 'Customers', (v) => v],
+    ['total_products', 'Products', (v) => v],
+    ['low_stock_count', 'Low Stock ⚠️', (v) => v],
+  ]
   const [stats, setStats]         = useState({})
   const [salesData, setSalesData] = useState([])
   const [salesLoading, setSalesLoading] = useState(false)
@@ -135,7 +138,7 @@ export default function Dashboard() {
             <div style={{ borderRadius: 8, background: 'rgba(26,35,126,0.15)', border: '1px solid rgba(57,73,171,0.25)', padding: '8px 12px', textAlign: 'center' }}>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', marginBottom: 2 }}>Revenue</div>
               <div style={{ fontWeight: 700, fontSize: isMobile ? 17 : 20, color: '#6fa8ff' }}>
-                ₹{Math.round(periodRevenue).toLocaleString()}
+                {sym}{Math.round(periodRevenue).toLocaleString()}
               </div>
             </div>
           </Col>
@@ -161,7 +164,7 @@ export default function Dashboard() {
               <Tooltip
                 contentStyle={{ background: 'rgba(10,5,2,0.9)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 8 }}
                 formatter={(v, name) => [
-                  name === 'revenue' ? `₹${Number(v).toLocaleString()}` : v,
+                  name === 'revenue' ? `${sym}${Number(v).toLocaleString()}` : v,
                   name === 'revenue' ? 'Revenue' : 'Bills',
                 ]}
                 labelFormatter={(l) => `Date: ${l}`}
@@ -187,7 +190,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                   <XAxis dataKey="category" tick={{ fontSize: 9 }} />
                   <YAxis tick={{ fontSize: 9 }} width={isMobile ? 40 : 60} />
-                  <Tooltip contentStyle={{ background: 'rgba(10,5,2,0.9)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 8 }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                  <Tooltip contentStyle={{ background: 'rgba(10,5,2,0.9)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 8 }} formatter={(v) => `${sym}${Number(v).toLocaleString()}`} />
                   <Bar dataKey="revenue" fill="#3949AB" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -202,7 +205,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                   <XAxis dataKey="payment_mode" tick={{ fontSize: 9 }} />
                   <YAxis tick={{ fontSize: 9 }} width={isMobile ? 40 : 60} />
-                  <Tooltip contentStyle={{ background: 'rgba(10,5,2,0.9)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 8 }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                  <Tooltip contentStyle={{ background: 'rgba(10,5,2,0.9)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 8 }} formatter={(v) => `${sym}${Number(v).toLocaleString()}`} />
                   <Bar dataKey="revenue" fill="#00897B" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
