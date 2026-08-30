@@ -29,6 +29,7 @@ class Store(Base):
     gstin        = Column(String(20))
     plan         = Column(String(20), default="Free")
     upi_id       = Column(String(100), nullable=True)
+    country      = Column(String(50), default="India")
     is_active    = Column(Boolean, default=True)
     created_at   = Column(DateTime, default=_now)
     last_login   = Column(DateTime, nullable=True)

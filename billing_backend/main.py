@@ -26,6 +26,7 @@ def _migrate_db():
     migrations = [
         "ALTER TABLE bills ADD COLUMN share_token TEXT",
         "ALTER TABLE customers ADD COLUMN credit_balance REAL DEFAULT 0.0",
+        "ALTER TABLE stores ADD COLUMN country TEXT DEFAULT 'India'",
     ]
     for stmt in migrations:
         try:
