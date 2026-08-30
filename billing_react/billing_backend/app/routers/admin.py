@@ -161,7 +161,7 @@ def revenue_by_store(
     rows = (
         db.query(Store.store_name, func.sum(Bill.grand_total).label("revenue"))
         .join(Bill, Bill.store_code == Store.store_code)
-        .group_by(Store.store_code)
+        .group_by(Store.store_code, Store.store_name)
         .order_by(func.sum(Bill.grand_total).desc())
         .all()
     )

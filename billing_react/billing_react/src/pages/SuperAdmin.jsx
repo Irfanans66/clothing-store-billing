@@ -121,11 +121,6 @@ export default function SuperAdmin() {
       render: (v) => <Tag color="blue">{v || 'Free'}</Tag> },
     { title: 'Status', dataIndex: 'is_active', key: 'is_active', width: 80,
       render: (v) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Frozen'}</Tag> },
-    { title: 'Revenue', dataIndex: 'revenue', key: 'revenue', width: 110,
-      render: (v) => <Text strong style={{ color: '#1A237E' }}>₹{Math.round(v || 0).toLocaleString()}</Text> },
-    { title: 'Bills', dataIndex: 'bills', key: 'bills', width: 60 },
-    { title: 'Signup', dataIndex: 'created_at', key: 'created_at', width: 100,
-      render: (v) => v ? new Date(v).toLocaleDateString() : '—' },
     {
       title: 'Actions', key: 'actions', width: 180,
       render: (_, r) => (
@@ -145,6 +140,11 @@ export default function SuperAdmin() {
         </Space>
       ),
     },
+    { title: 'Revenue', dataIndex: 'revenue', key: 'revenue', width: 110,
+      render: (v) => <Text strong style={{ color: '#1A237E' }}>₹{Math.round(v || 0).toLocaleString()}</Text> },
+    { title: 'Bills', dataIndex: 'bills', key: 'bills', width: 60 },
+    { title: 'Signup', dataIndex: 'created_at', key: 'created_at', width: 100,
+      render: (v) => v ? new Date(v).toLocaleDateString() : '—' },
   ]
 
   const ticketColumns = [
