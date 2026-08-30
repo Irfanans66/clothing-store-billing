@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import {
-  Card, Row, Col, Statistic, Table, Input, Select, Button,
+  Card, Row, Col, Statistic, Table, Input, Select, Button, Alert,
   Typography, Tag, Space, Modal, Form, message, Tabs, Descriptions, Divider,
 } from 'antd'
 import { SearchOutlined, MessageOutlined, EyeOutlined } from '@ant-design/icons'
@@ -23,6 +23,7 @@ export default function SuperAdmin() {
   const { role } = useAuthStore()
   const [ov, setOv]               = useState({})
   const [stores, setStores]       = useState([])
+  const [storesError, setStoresError] = useState('')
   const [daily, setDaily]         = useState([])
   const [byStore, setByStore]     = useState([])
   const [tickets, setTickets]     = useState([])
@@ -36,24 +37,26 @@ export default function SuperAdmin() {
   const [form] = Form.useForm()
   const [replyForm] = Form.useForm()
 
-  if (role !== 'SuperAdmin') {
-    return <Card><Title level={4}>Access Denied</Title></Card>
-  }
-
-  async function load() {
+  function load() {
     adminOverview().then(setOv).catch(() => {})
-    adminListStores().then(setStores).catch(() => {})
+    adminListStores()
+      .then((data) => { setStores(data); setStoresError('') })
+      .catch((err) => setStoresError(err.message || 'Failed to load stores'))
     adminDailyRevenue().then(setDaily).catch(() => {})
     adminRevenueByStore().then(setByStore).catch(() => {})
   }
 
-  async function loadTickets() {
+  function loadTickets() {
     const s = ticketFilter !== 'All' ? ticketFilter : undefined
     adminListTickets(s).then(setTickets).catch(() => {})
   }
 
   useEffect(() => { load() }, [])
   useEffect(() => { loadTickets() }, [ticketFilter])
+
+  if (role !== 'SuperAdmin') {
+    return <Card><Title level={4}>Access Denied</Title></Card>
+  }
 
   async function handleToggle(code) {
     try { await adminToggleStore(code); load() }
@@ -267,7 +270,9 @@ export default function SuperAdmin() {
                       {plans.map((p) => <Select.Option key={p} value={p}>{p}</Select.Option>)}
                     </Select>
                     <Text type="secondary">{filtered.length} of {stores.length} stores</Text>
+                    <Button onClick={load}>Refresh</Button>
                   </Space>
+                  {storesError && <Alert type="error" message={storesError} style={{ marginBottom: 12 }} showIcon />}
                   <Table
                     dataSource={filtered} columns={storeColumns} rowKey="store_code"
                     size="small" pagination={{ pageSize: 20 }} scroll={{ x: 900 }}
