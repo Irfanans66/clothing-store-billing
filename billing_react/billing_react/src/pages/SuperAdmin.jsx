@@ -329,11 +329,12 @@ export default function SuperAdmin() {
             </Space>
           )
         }
-        width={600}
+        width="min(600px, 96vw)"
+        style={{ top: 20 }}
       >
         {s && (
           <>
-            <Descriptions bordered size="small" column={2} style={{ marginBottom: 16 }}>
+            <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} style={{ marginBottom: 16 }}>
               <Descriptions.Item label="Store Name" span={2}>
                 <Text strong style={{ fontSize: 15 }}>{s.store_name}</Text>
               </Descriptions.Item>
@@ -368,14 +369,14 @@ export default function SuperAdmin() {
 
             <Divider style={{ margin: '12px 0' }}>Sales Summary</Divider>
 
-            <Row gutter={16}>
+            <Row gutter={[12, 12]}>
               {[
                 { label: 'Total Bills',   value: s.bills,     color: '#E65100' },
                 { label: 'Total Revenue', value: `₹${Math.round(s.revenue || 0).toLocaleString()}`, color: '#1A237E' },
                 { label: 'Customers',     value: s.customers, color: '#2E7D32' },
                 { label: 'Products',      value: s.products,  color: '#6A1B9A' },
               ].map(({ label, value, color }) => (
-                <Col span={6} key={label}>
+                <Col xs={12} sm={6} key={label}>
                   <Card styles={{ body: { padding: '12px 14px' } }} style={{ borderRadius: 10, textAlign: 'center', borderTop: `3px solid ${color}` }}>
                     <div style={{ fontSize: 20, fontWeight: 700, color }}>{value}</div>
                     <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{label}</div>
