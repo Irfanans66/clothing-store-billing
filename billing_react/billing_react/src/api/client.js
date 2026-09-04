@@ -74,7 +74,7 @@ export const changeTeamPassword = (username, data) =>
 
 // ── Super Admin ───────────────────────────────────────────────────────────────
 export const adminOverview = () => api.get('/admin/overview')
-export const adminListStores = () => api.get('/admin/stores')
+export const adminListStores = () => api.get('/admin/stores', { timeout: 60000 })
 export const adminToggleStore = (code) => api.patch(`/admin/stores/${code}/toggle`)
 export const adminUpdateStore = (code, data) => api.patch(`/admin/stores/${code}`, data)
 export const adminDailyRevenue = () => api.get('/admin/daily-revenue')

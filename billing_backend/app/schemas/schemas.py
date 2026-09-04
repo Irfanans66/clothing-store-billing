@@ -376,6 +376,7 @@ class StoreStat(BaseModel):
     address: Optional[str]
     plan: str
     is_active: bool
+    notes: Optional[str] = None
     customers: int
     products: int
     bills: int

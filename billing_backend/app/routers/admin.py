@@ -30,6 +30,7 @@ def _store_stat(store: Store, db: Session) -> StoreStat:
         phone=store.phone,
         address=store.address,
         plan=store.plan,
+        notes=store.notes,
         is_active=store.is_active,
         customers=customers,
         products=products,
@@ -77,8 +78,61 @@ def list_stores(
     _: dict = Depends(require_superadmin),
     db: Session = Depends(get_db),
 ):
-    stores = db.query(Store).order_by(Store.created_at.desc()).all()
-    return [_store_stat(s, db) for s in stores]
+    bill_sq = (
+        db.query(
+            Bill.store_code,
+            func.count(Bill.id).label("bills"),
+            func.coalesce(func.sum(Bill.grand_total), 0.0).label("revenue"),
+        )
+        .group_by(Bill.store_code)
+        .subquery()
+    )
+    customer_sq = (
+        db.query(Customer.store_code, func.count(Customer.id).label("customers"))
+        .group_by(Customer.store_code)
+        .subquery()
+    )
+    product_sq = (
+        db.query(Product.store_code, func.count(Product.id).label("products"))
+        .group_by(Product.store_code)
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            Store,
+            func.coalesce(bill_sq.c.bills, 0).label("bills"),
+            func.coalesce(bill_sq.c.revenue, 0.0).label("revenue"),
+            func.coalesce(customer_sq.c.customers, 0).label("customers"),
+            func.coalesce(product_sq.c.products, 0).label("products"),
+        )
+        .outerjoin(bill_sq, bill_sq.c.store_code == Store.store_code)
+        .outerjoin(customer_sq, customer_sq.c.store_code == Store.store_code)
+        .outerjoin(product_sq, product_sq.c.store_code == Store.store_code)
+        .order_by(Store.created_at.desc())
+        .all()
+    )
+
+    return [
+        StoreStat(
+            store_code=store.store_code,
+            store_name=store.store_name,
+            owner_user=store.owner_user,
+            email=store.email,
+            phone=store.phone,
+            address=store.address,
+            plan=store.plan or "Free",
+            notes=store.notes,
+            is_active=store.is_active,
+            customers=int(customers),
+            products=int(products),
+            bills=int(bills),
+            revenue=float(revenue),
+            created_at=store.created_at,
+            last_login=store.last_login,
+        )
+        for store, bills, revenue, customers, products in rows
+    ]
 
 
 # ── GET /admin/stores/{store_code} ────────────────────────────────────────────
