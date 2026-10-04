@@ -2,7 +2,7 @@
   "packageId": "com.localbilling.app",
   "host": "www.loacalbilling.com",
   "name": "Local Billing",
-  "launcherName": "Loca Billing",
+  "launcherName": "Local Billing",
   "display": "standalone",
   "themeColor": "#C9A84C",
   "themeColorDark": "#000000",
@@ -12,19 +12,19 @@
   "navigationDividerColorDark": "#000000",
   "backgroundColor": "#080401",
   "enableNotifications": true,
-  "startUrl": "https://www.loacalbilling.com/new-bill",
-  "iconUrl": "https://sparkling-grace-production-7c08.up.railway.app/pwa-512x512.png",
-  "maskableIconUrl": "https://sparkling-grace-production-7c08.up.railway.app/maskable-icon-512x512.png",
+  "startUrl": "/new-bill",
+  "iconUrl": "https://www.loacalbilling.com/pwa-512x512.png",
+  "maskableIconUrl": "https://www.loacalbilling.com/maskable-icon-512x512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "/Users/irfanansari/Documents/Documents/android.keystore",
     "alias": "Local Billing"
   },
-  "appVersionName": "1",
-  "appVersionCode": 1,
+  "appVersionName": "2",
+  "appVersionCode": 2,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://sparkling-grace-production-7c08.up.railway.app/manifest.webmanifest",
+  "webManifestUrl": "https://www.loacalbilling.com/manifest.webmanifest",
   "fallbackType": "customtabs",
   "features": {
     "playBilling": {
@@ -37,7 +37,7 @@
   "enableSiteSettingsShortcut": true,
   "isChromeOSOnly": false,
   "isMetaQuest": false,
-  "fullScopeUrl": "https://sparkling-grace-production-7c08.up.railway.app/",
+  "fullScopeUrl": "https://www.loacalbilling.com/",
   "minSdkVersion": 21,
   "orientation": "portrait",
   "fingerprints": [],
@@ -47,5 +47,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1"
+  "appVersion": "2"
 }
