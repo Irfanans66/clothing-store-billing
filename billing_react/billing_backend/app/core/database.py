@@ -13,6 +13,10 @@ settings = get_settings()
 # Railway gives postgres:// but SQLAlchemy 2.x requires postgresql://
 _db_url = settings.DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# SQLAlchemy 2.1+ defaults postgresql:// to psycopg (v3); we ship psycopg2
+if _db_url.startswith("postgresql://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
 # SQLite needs check_same_thread=False; PostgreSQL ignores connect_args
 connect_args = {"check_same_thread": False} if "sqlite" in _db_url else {}
 
