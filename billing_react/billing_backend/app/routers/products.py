@@ -54,6 +54,7 @@ def list_products(
         q = q.filter(
             Product.product_name.ilike(like)
             | Product.item_id.ilike(like)
+            | Product.barcode.ilike(like)   # printed labels encode the barcode
             | Product.category.ilike(like)
         )
     if category:

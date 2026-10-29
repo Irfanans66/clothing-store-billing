@@ -49,8 +49,8 @@ export default function App() {
           colorBgElevated:     '#EDE8E2',
           colorBorder:         '#D8D2CB',
           colorText:           '#3A3530',
-          colorTextSecondary:  '#9A9490',
-          colorTextTertiary:   '#B8B2AC',
+          colorTextSecondary:  '#5F5853',
+          colorTextTertiary:   '#7A726C',
         },
       }}
     >

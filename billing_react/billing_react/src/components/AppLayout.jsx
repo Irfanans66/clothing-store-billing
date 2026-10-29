@@ -117,6 +117,35 @@ function NavMenu({ menuItems, selectedKey, onSelect }) {
   )
 }
 
+function CollapsedNav({ menuItems, selectedKey, onSelect }) {
+  return (
+    <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 6px' }}>
+      {menuItems.map(({ key, icon, label }) => {
+        const active = selectedKey === key
+        return (
+          <button
+            key={key} type="button" onClick={() => onSelect(key)} title={label}
+            aria-current={active ? 'page' : undefined}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+              padding: '9px 2px', border: 'none', borderRadius: 12, cursor: 'pointer',
+              background: active ? 'var(--bg)' : 'transparent',
+              boxShadow: active ? 'var(--neu-inset)' : 'none',
+              color: active ? '#2F6690' : '#5F5853',
+              fontFamily: "'Poppins', sans-serif",
+            }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>{icon}</span>
+            <span style={{ fontSize: 10.5, fontWeight: active ? 700 : 500, lineHeight: 1.2, textAlign: 'center' }}>
+              {label.replace(' & Support', '')}
+            </span>
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
 function BrandHeader({ collapsed, storeName }) {
   return (
     <div style={{
@@ -136,14 +165,12 @@ function BrandHeader({ collapsed, storeName }) {
               fontSize: 15, fontWeight: 700,
               fontFamily: "'Poppins', sans-serif",
               letterSpacing: '0.3px',
-              background: `linear-gradient(90deg, #fff 20%, ${GOLD_LIGHT})`,
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text', whiteSpace: 'nowrap',
+              color: '#3A3530', whiteSpace: 'nowrap',
             }}>
               Loacal Billing
             </div>
             {storeName && (
-              <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <Text style={{ color: '#5F5853', fontSize: 11, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {storeName}
               </Text>
             )}
@@ -181,7 +208,7 @@ function MobileTopHeader({ storeName, role, username, onProfileAction }) {
             {username?.[0]?.toUpperCase()}
           </Avatar>
           <div style={{ lineHeight: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.9)', marginBottom: 2 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#3A3530', marginBottom: 2 }}>
               {username}
             </div>
             <Tag color={ROLE_COLORS[role] || 'default'} style={{ margin: 0, fontSize: 9, padding: '0 5px', lineHeight: '15px' }}>
@@ -194,10 +221,7 @@ function MobileTopHeader({ storeName, role, username, onProfileAction }) {
       {/* Store name — center */}
       <div style={{ flex: 1, textAlign: 'center', padding: '0 8px', overflow: 'hidden' }}>
         <div style={{
-          fontSize: 14, fontWeight: 700,
-          background: `linear-gradient(90deg, #fff 20%, ${GOLD_LIGHT})`,
-          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
+          fontSize: 15, fontWeight: 700, color: '#2F6690',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {storeName || 'Loacal Billing'}
@@ -214,10 +238,13 @@ function MobileTopHeader({ storeName, role, username, onProfileAction }) {
 }
 
 // ── Mobile: fixed glass bottom navigation bar ───────────────────────────────
-function MobileBottomNav({ tabs, currentPath, onNavigate }) {
+function MobileBottomNav({ tabs, currentPath, onNavigate, canBill }) {
+  const all = canBill
+    ? [...tabs.slice(0, 2), { key: '/new-bill', Icon: PlusOutlined, label: 'New Bill', primary: true }, ...tabs.slice(2)]
+    : tabs
   return (
     <div className="mobile-bottom-nav">
-      {tabs.map(({ key, Icon, label, matchPaths }) => {
+      {all.map(({ key, Icon, label, matchPaths, primary }) => {
         const isActive = matchPaths
           ? matchPaths.some(p => currentPath.startsWith(p))
           : currentPath === key || currentPath.startsWith(key + '/')
@@ -225,41 +252,21 @@ function MobileBottomNav({ tabs, currentPath, onNavigate }) {
         return (
           <button
             key={key}
-            className={`mob-tab${isActive ? ' mob-tab--active' : ''}`}
+            className={`mob-tab${isActive ? ' mob-tab--active' : ''}${primary ? ' mob-tab--primary' : ''}`}
             onClick={() => onNavigate(key)}
+            aria-current={isActive ? 'page' : undefined}
           >
-            {isActive && <span className="mob-tab-indicator" />}
-            <Icon style={{
+            {isActive && !primary && <span className="mob-tab-indicator" />}
+            {primary ? <span className="mob-tab-plus"><Icon /></span> : <Icon style={{
               fontSize: 22,
               filter: isActive ? `drop-shadow(0 0 5px ${GOLD}99)` : 'none',
               transition: 'filter 0.2s',
-            }} />
+            }} />}
             <span className="mob-tab-label">{label}</span>
           </button>
         )
       })}
     </div>
-  )
-}
-
-// ── Mobile: New Bill FAB (floating action button) ───────────────────────────
-function NewBillFAB({ onClick }) {
-  const [pressed, setPressed] = useState(false)
-  return (
-    <button
-      className="new-bill-fab"
-      style={{ transform: pressed ? 'scale(0.92)' : 'scale(1)' }}
-      onClick={onClick}
-      onTouchStart={() => setPressed(true)}
-      onTouchEnd={() => setPressed(false)}
-      onMouseDown={() => setPressed(true)}
-      onMouseUp={() => setPressed(false)}
-    >
-      <PlusOutlined style={{ fontSize: 20, fontWeight: 900 }} />
-      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.5px', lineHeight: 1 }}>
-        NEW BILL
-      </span>
-    </button>
   )
 }
 
@@ -304,14 +311,16 @@ export default function AppLayout() {
       <Layout style={{ minHeight: '100vh' }}>
         <Sider
           collapsible collapsed={collapsed} onCollapse={setCollapsed} trigger={null}
-          width={220}
+          width={220} collapsedWidth={84}
           style={{ position: 'fixed', height: '100vh', left: 0, top: 0, overflow: 'auto', zIndex: 100 }}
         >
           <BrandHeader collapsed={collapsed} storeName={storeName} />
-          <NavMenu menuItems={menuItems} selectedKey={path} onSelect={go} />
+          {collapsed
+            ? <CollapsedNav menuItems={menuItems} selectedKey={path} onSelect={go} />
+            : <NavMenu menuItems={menuItems} selectedKey={path} onSelect={go} />}
         </Sider>
 
-        <Layout style={{ marginLeft: collapsed ? 80 : 220, transition: 'margin-left 0.2s' }}>
+        <Layout style={{ marginLeft: collapsed ? 84 : 220, transition: 'margin-left 0.2s' }}>
           <Header style={{
             padding: '0 24px', display: 'flex', alignItems: 'center',
             justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 99, height: 56,
@@ -324,7 +333,7 @@ export default function AppLayout() {
             />
             <Space>
               {storeName && (
-                <Text style={{ fontSize: 13, color: '#9A9490' }}>{storeName}</Text>
+                <Text style={{ fontSize: 13, color: '#5F5853' }}>{storeName}</Text>
               )}
               <Tag color="blue" style={{ margin: 0, boxShadow: '2px 2px 6px rgba(163,155,140,0.4), -2px -2px 6px rgba(255,255,255,0.9)', border: 'none' }}>{role}</Tag>
               <Dropdown menu={desktopUserMenu} trigger={['click']}>
@@ -376,16 +385,12 @@ export default function AppLayout() {
         </div>
       </div>
 
-      {/* New Bill FAB — lower-right, above bottom nav, hidden on /new-bill page */}
-      {canBill && path !== '/new-bill' && (
-        <NewBillFAB onClick={() => navigate('/new-bill')} />
-      )}
-
       {/* Fixed bottom navigation bar */}
       <MobileBottomNav
         tabs={mobileTabs}
         currentPath={path}
         onNavigate={go}
+        canBill={canBill}
       />
     </div>
   )

@@ -9,8 +9,8 @@
   --mint:        #96C9B0;
   --peach:       #F0C4A0;
   --text:        #3A3530;
-  --text-sub:    #9A9490;
-  --text-muted:  #B8B2AC;
+  --text-sub:    #5F5853;
+  --text-muted:  #7A726C;
   --neu-raise:   6px 6px 18px var(--shadow-dark), -6px -6px 18px var(--shadow-lite);
   --neu-inset:   inset 4px 4px 10px var(--shadow-dark), inset -4px -4px 10px var(--shadow-lite);
   --neu-sm:      3px 3px 8px var(--shadow-dark), -3px -3px 8px var(--shadow-lite);
@@ -97,6 +97,16 @@ body {
   outline: none !important;
   border: none !important;
 }
+/* An input inside an affix/number wrapper is one field, not a box inside a box */
+.ant-input-affix-wrapper .ant-input,
+.ant-input-number-affix-wrapper .ant-input-number,
+.ant-input-number-affix-wrapper .ant-input-number-input,
+.ant-select .ant-input-affix-wrapper .ant-input {
+  box-shadow: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  min-height: 0 !important;
+}
 .ant-input::placeholder,
 .ant-input-affix-wrapper input::placeholder { color: var(--text-muted) !important; }
 .ant-input-prefix { color: var(--text-sub) !important; }
@@ -104,8 +114,9 @@ body {
 .ant-input-number-input { background: transparent !important; color: var(--text) !important; }
 
 /* Buttons */
+/* Solid, strong primary so white button text stays readable (≈6:1 contrast) */
 .ant-btn-primary {
-  background: linear-gradient(135deg, var(--primary), var(--primary-dk)) !important;
+  background: #2F6690 !important;
   border: none !important;
   box-shadow: 4px 4px 12px var(--shadow-dark), -2px -2px 8px var(--shadow-lite) !important;
   font-weight: 600 !important;
@@ -113,6 +124,8 @@ body {
   border-radius: 12px !important;
   transition: all 0.2s !important;
 }
+.ant-btn-primary.ant-btn-dangerous { background: #C0392B !important; }
+.ant-btn-primary:disabled { background: #A7B8C6 !important; }
 .ant-btn-primary:hover {
   box-shadow: 6px 6px 16px var(--shadow-dark), -3px -3px 10px var(--shadow-lite) !important;
   transform: translateY(-1px);
@@ -125,7 +138,7 @@ body {
   background: var(--bg) !important;
   border: none !important;
   box-shadow: var(--neu-sm) !important;
-  color: var(--text-sub) !important;
+  color: var(--text) !important;
   border-radius: 12px !important;
 }
 .ant-btn-default:hover {
@@ -345,6 +358,14 @@ h4.ant-typography, h5.ant-typography { color: var(--text) !important; }
 }
 .mob-tab:active { background: var(--bg-dark); }
 .mob-tab--active { color: var(--primary-dk); }
+.mob-tab--primary { color: #2F6690; }
+.mob-tab-plus {
+  width: 40px; height: 30px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: #2F6690; color: #fff; font-size: 18px;
+  box-shadow: 0 3px 10px rgba(47,102,144,0.35);
+}
+.mob-tab--primary.mob-tab--active .mob-tab-plus { box-shadow: 0 0 0 3px rgba(47,102,144,0.25); }
 
 .mob-tab-indicator {
   position: absolute; top: 0; left: 50%;
@@ -369,7 +390,7 @@ h4.ant-typography, h5.ant-typography { color: var(--text) !important; }
   right: 16px;
   width: 58px; height: 58px;
   border-radius: 18px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-dk));
+  background: #2F6690;
   border: none; cursor: pointer;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;

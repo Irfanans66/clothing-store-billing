@@ -21,11 +21,19 @@ const STATUS_COLORS = {
 export default function BillHistory() {
   const [bills, setBills] = useState([])
   const [loading, setLoading] = useState(false)
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState({
-    date: '',
+    date: searchParams.get('date') || '',
     customer: searchParams.get('customer') || '',
-    payment_mode: '',
+    payment_mode: searchParams.get('payment_mode') || '',
+  })
+  // Filters that arrive from dashboard links (date range / category)
+  const [linked, setLinked] = useState(() => {
+    const from = searchParams.get('from'), to = searchParams.get('to')
+    const category = searchParams.get('category')
+    return from || to || category !== null
+      ? { from, to, category, categoryLabel: searchParams.get('category_label') || category }
+      : null
   })
   const screens  = useBreakpoint()
   const isMobile = !screens.md
@@ -68,13 +76,16 @@ export default function BillHistory() {
   const [returnNotes, setReturnNotes] = useState('')
   const [returnLoading, setReturnLoading] = useState(false)
 
-  async function load() {
+  async function load(link = linked) {
     setLoading(true)
     try {
       const params = {}
       if (filters.date) params.date = filters.date
       if (filters.customer) params.customer = filters.customer
       if (filters.payment_mode) params.payment_mode = filters.payment_mode
+      if (link?.from) params.date_from = link.from
+      if (link?.to) params.date_to = link.to
+      if (link?.category != null) params.category = link.category
       const res = await getBills(params)
       setBills(res || [])
     } catch {
@@ -86,12 +97,31 @@ export default function BillHistory() {
 
   useEffect(() => { load() }, [])
 
+  // ?bill=BILL0042 (New Bill → Return / Exchange): open that bill straight away
+  useEffect(() => {
+    const billNo = searchParams.get('bill')
+    if (billNo) viewDetail(billNo.trim().toUpperCase())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function clearLinked() {
+    setLinked(null)
+    setSearchParams({}, { replace: true })
+    load(null)
+  }
+
+  const fmtDay = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  const linkedLabel = linked && [
+    linked.categoryLabel && `Category: ${linked.categoryLabel}`,
+    linked.from && linked.to && (linked.from === linked.to ? fmtDay(linked.from) : `${fmtDay(linked.from)} – ${fmtDay(linked.to)}`),
+  ].filter(Boolean).join(' · ')
+
   async function viewDetail(billNo) {
     try {
       const res = await getBill(billNo)
       setDetailBill(res)
       setModalOpen(true)
-    } catch { }
+    } catch (err) { message.error(`Bill ${billNo}: ${err.message}`) }
   }
 
   function openReturnModal() {
@@ -241,7 +271,7 @@ export default function BillHistory() {
               >
                 {PAYMENT_MODES.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
               </Select>
-              <Button type="primary" onClick={load} icon={<SearchOutlined />}>Search</Button>
+              <Button type="primary" onClick={() => load()} icon={<SearchOutlined />}>Search</Button>
             </div>
           </div>
         ) : (
@@ -273,11 +303,16 @@ export default function BillHistory() {
             >
               {PAYMENT_MODES.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
             </Select>
-            <Button type="primary" onClick={load} icon={<SearchOutlined />}>Search</Button>
+            <Button type="primary" onClick={() => load()} icon={<SearchOutlined />}>Search</Button>
           </Space>
         )}
       </Card>
 
+      {linked && (
+        <Tag closable onClose={clearLinked} color="blue" style={{ marginBottom: 10, fontSize: 13, padding: '4px 10px' }}>
+          Showing: {linkedLabel}
+        </Tag>
+      )}
       <Text type="secondary" style={{ marginBottom: 10, display: 'block', fontSize: 12 }}>
         {bills.length} record(s) found
       </Text>

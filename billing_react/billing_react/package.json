@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.3",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "antd": "^6.4.3",
     "axios": "^1.16.1",
     "dayjs": "^1.11.20",

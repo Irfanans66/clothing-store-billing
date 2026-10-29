@@ -28,6 +28,7 @@ export const updateStoreProfile = (data) => api.patch('/auth/profile', data)
 
 // ── Dashboard / Reports ───────────────────────────────────────────────────────
 export const getDashboard = () => api.get('/reports/dashboard')
+export const getOverview = (start, end) => api.get('/reports/overview', { params: { start, end } })
 export const getDailySales = (period = 'month') => api.get('/reports/daily-sales', { params: { period } })
 export const getSalesByCategory = () => api.get('/reports/sales-by-category')
 export const getSalesByPayment = () => api.get('/reports/sales-by-payment-mode')

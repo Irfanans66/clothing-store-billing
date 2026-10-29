@@ -3,7 +3,7 @@ import { Card, Table, Input, Button, Space, Tag, Typography, Modal, Form, Row, C
   Select, message, Statistic, InputNumber, Alert, Grid } from 'antd'
 import { SearchOutlined, UserAddOutlined, EyeOutlined, WhatsAppOutlined, DollarOutlined, PhoneOutlined, GiftOutlined } from '@ant-design/icons'
 import { getCustomers, createCustomer, updateCustomer, recordCreditPayment, getLoyaltyProgram, resendWalletLink } from '../api/client'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useCurrency } from '../utils/currency'
 
@@ -17,7 +17,8 @@ export default function Customers() {
   const [customers, setCustomers]     = useState([])
   const [loading, setLoading]         = useState(false)
   const [search, setSearch]           = useState('')
-  const [addModal, setAddModal]       = useState(false)
+  const [searchParams]                = useSearchParams()
+  const [addModal, setAddModal]       = useState(searchParams.get('add') === '1')
   const [editModal, setEditModal]     = useState(false)
   const [editTarget, setEditTarget]   = useState(null)
   const [payModal, setPayModal]       = useState(false)

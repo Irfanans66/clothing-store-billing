@@ -20,7 +20,7 @@ def _upi_payment_url(upi_id: str, store_name: str, amount: int, bill_no: str) ->
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import or_, text
 
 from app.core.database import get_db
 from app.core.deps import require_store_access
@@ -1113,7 +1113,11 @@ def create_bill(
 def list_bills(
     date: Optional[str]         = Query(None),
     customer: Optional[str]     = Query(None),
+    customer_id: Optional[str]  = Query(None),
     payment_mode: Optional[str] = Query(None),
+    date_from: Optional[str]    = Query(None, description="YYYY-MM-DD, inclusive"),
+    date_to: Optional[str]      = Query(None, description="YYYY-MM-DD, inclusive"),
+    category: Optional[str]     = Query(None, description="'|'-separated category spellings"),
     skip: int = 0,
     limit: int = 100,
     identity: dict = Depends(require_store_access),
@@ -1123,7 +1127,16 @@ def list_bills(
     q  = db.query(Bill).filter(Bill.store_code == sc)
     if date:         q = q.filter(Bill.bill_date.like(f"%{date}%"))
     if customer:     q = q.filter(Bill.customer_name.ilike(f"%{customer}%"))
+    if customer_id:  q = q.filter(Bill.customer_id == customer_id)
     if payment_mode: q = q.filter(Bill.payment_mode == payment_mode)
+    if date_from:    q = q.filter(Bill.bill_date >= date_from)
+    if date_to:      q = q.filter(Bill.bill_date <= date_to)
+    if category is not None:
+        names = category.split("|")
+        cond = BillItem.category.in_(names)
+        if "" in names or "Uncategorized" in names:
+            cond = or_(cond, BillItem.category.is_(None), BillItem.category == "")
+        q = q.filter(Bill.id.in_(db.query(BillItem.bill_id).filter(BillItem.store_code == sc, cond)))
     return q.order_by(Bill.id.desc()).offset(skip).limit(limit).all()
 
 

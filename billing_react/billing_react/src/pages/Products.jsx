@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Card, Table, Input, Button, Space, Tag, Typography, Modal, Form, Row, Col, Select, InputNumber, message, Switch, Grid } from 'antd'
 import { SearchOutlined, PlusOutlined, BarcodeOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getProducts, createProduct, updateProduct, adjustStock } from '../api/client'
 import { useCurrency } from '../utils/currency'
 
@@ -15,10 +15,12 @@ const GST_RATES = [0,5,12,18,28]
 export default function Products() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(false)
-  const [search, setSearch] = useState('')
+  // Dashboard links: ?low=1 (low stock), ?add=1 (open Add Product), ?search=ITM001
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(searchParams.get('search') || '')
   const [category, setCategory] = useState('')
-  const [lowOnly, setLowOnly] = useState(false)
-  const [addModal, setAddModal] = useState(false)
+  const [lowOnly, setLowOnly] = useState(searchParams.get('low') === '1')
+  const [addModal, setAddModal] = useState(searchParams.get('add') === '1')
   const [stockModal, setStockModal] = useState(null)
   const [stockDelta, setStockDelta] = useState(0)
   const [form] = Form.useForm()
