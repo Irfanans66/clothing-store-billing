@@ -14,12 +14,12 @@ export default function Privacy() {
       background: '#fff',
       minHeight: '100vh',
     }}>
-      <Title level={2} style={{ color: '#1a1a1a' }}>Privacy Policy – Local Billing</Title>
+      <Title level={2} style={{ color: '#1a1a1a' }}>Privacy Policy – Loacal Billing</Title>
       <Text type="secondary">Last updated: June 2026</Text>
       <Divider />
 
       <Paragraph>
-        Local Billing is a billing and point-of-sale application for clothing stores and boutiques.
+        Loacal Billing is a billing and point-of-sale application for clothing stores and boutiques.
       </Paragraph>
 
       <Title level={4}>Data We Collect</Title>

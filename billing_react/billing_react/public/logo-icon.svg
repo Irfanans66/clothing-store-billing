@@ -71,7 +71,7 @@
     fill="#9060c0"
     font-family="Arial, sans-serif"
     font-size="14"
-    letter-spacing="2">LOCAL BILLING</text>
+    letter-spacing="2">LOACAL BILLING</text>
 
   <!-- Divider line in receipt -->
   <line x1="162" y1="270" x2="338" y2="270" stroke="#d4b8ff" stroke-width="1.5" stroke-dasharray="3,3"/>

@@ -14,12 +14,12 @@ export default function Terms() {
       background: '#fff',
       minHeight: '100vh',
     }}>
-      <Title level={2} style={{ color: '#1a1a1a' }}>Terms of Service – Local Billing</Title>
+      <Title level={2} style={{ color: '#1a1a1a' }}>Terms of Service – Loacal Billing</Title>
       <Text type="secondary">Last updated: July 2026</Text>
       <Divider />
 
       <Paragraph>
-        Local Billing ("we", "our", "the Service") is a multi-tenant billing and point-of-sale
+        Loacal Billing ("we", "our", "the Service") is a multi-tenant billing and point-of-sale
         Software-as-a-Service platform operated by Irfan Ansari, Bengaluru, India. These Terms
         of Service govern your use of the Service.
       </Paragraph>
@@ -49,7 +49,7 @@ export default function Terms() {
       <ul>
         <li>
           If you enable the loyalty program, your customers may receive a digital loyalty card
-          via Google Wallet. The card is issued under the Local Billing Google Wallet Issuer
+          via Google Wallet. The card is issued under the Loacal Billing Google Wallet Issuer
           account, on behalf of your store.
         </li>
         <li>Loyalty points shown on customer cards reflect the balance at the time of the last sync</li>
@@ -115,7 +115,7 @@ export default function Terms() {
         For questions or concerns, contact us at:{' '}
         <a href="mailto:8809968819i@gmail.com">8809968819i@gmail.com</a>
         <br />
-        Local Billing, KR Puram, Bengaluru 560036, Karnataka, India
+        Loacal Billing, KR Puram, Bengaluru 560036, Karnataka, India
       </Paragraph>
     </div>
   )

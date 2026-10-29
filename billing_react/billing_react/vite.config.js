@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'logo-icon.svg', 'apple-touch-icon-180x180.png', 'store-bg.jpg'],
       manifest: {
-        name: 'Local Billing',
-        short_name: 'Local Billing',
+        name: 'Loacal Billing',
+        short_name: 'Loacal Billing',
         description: 'POS and billing system for clothing stores',
         theme_color: '#0a0500',
         background_color: '#0a0500',

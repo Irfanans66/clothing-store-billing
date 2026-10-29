@@ -1,8 +1,8 @@
 {
   "packageId": "com.localbilling.app",
   "host": "www.loacalbilling.com",
-  "name": "Local Billing",
-  "launcherName": "Local Billing",
+  "name": "Loacal Billing",
+  "launcherName": "Loacal Billing",
   "display": "standalone",
   "themeColor": "#C9A84C",
   "themeColorDark": "#000000",

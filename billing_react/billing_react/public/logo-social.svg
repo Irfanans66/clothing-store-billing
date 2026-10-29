@@ -101,7 +101,7 @@
     font-family="Arial Black, Arial, sans-serif"
     font-size="22"
     font-weight="900"
-    letter-spacing="3">LOCAL BILLING</text>
+    letter-spacing="3">LOACAL BILLING</text>
 
   <!-- Sub header -->
   <text x="525" y="170"
@@ -252,6 +252,6 @@
     font-family="Arial, sans-serif"
     font-size="18"
     opacity="0.2"
-    letter-spacing="3">localbilling.app</text>
+    letter-spacing="3">loacalbilling.com</text>
 
 </svg>

@@ -140,7 +140,7 @@ function BrandHeader({ collapsed, storeName }) {
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               backgroundClip: 'text', whiteSpace: 'nowrap',
             }}>
-              Local Billing
+              Loacal Billing
             </div>
             {storeName && (
               <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -200,7 +200,7 @@ function MobileTopHeader({ storeName, role, username, onProfileAction }) {
           backgroundClip: 'text',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
-          {storeName || 'Local Billing'}
+          {storeName || 'Loacal Billing'}
         </div>
       </div>
 

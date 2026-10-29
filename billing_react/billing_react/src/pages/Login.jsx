@@ -194,10 +194,10 @@ export default function Login() {
             background: BG, boxShadow: neu(),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <img src="/logo-icon.svg" alt="Local Billing" style={{ width: 52, height: 52 }} />
+            <img src="/logo-icon.svg" alt="Loacal Billing" style={{ width: 52, height: 52 }} />
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#3A3530', letterSpacing: '-0.5px' }}>
-            Local Billing
+            Loacal Billing
           </div>
           <div style={{ fontSize: 12, color: '#9A9490', marginTop: 4, letterSpacing: 0.5 }}>
             Smart POS for Clothing Stores
@@ -266,7 +266,7 @@ export default function Login() {
         {/* Footer */}
         <div style={{ textAlign: 'center', marginTop: 20 }}>
           <div style={{ fontSize: 11, color: '#B0AAA4', marginBottom: 10 }}>
-            www.localbilling.com
+            www.loacalbilling.com
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
             {/* WhatsApp */}
