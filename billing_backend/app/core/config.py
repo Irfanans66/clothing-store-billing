@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     SUPER_ADMIN_USERNAME: str = "superadmin"
     SUPER_ADMIN_PASSWORD: str = "Super@Admin2024"
 
+    # Create the demo "admin / admin123" store on startup. Keep off in production.
+    SEED_DEMO_STORE: bool = False
+
     ALLOWED_ORIGINS: str = "*"
 
     APP_NAME: str = "Clothing Store Billing API"

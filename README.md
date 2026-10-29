@@ -92,7 +92,7 @@ SUPER_ADMIN_PASSWORD=Super@Admin2024
 | Admin      | `admin`     | `admin123`    |
 | Super Admin| `superadmin`| `Super@Admin2024` |
 
-> Change passwords after first login in production.
+> The demo `admin` store is only created when `SEED_DEMO_STORE=true` is set in `.env` (off by default). Change passwords after first login in production.
 
 ---
 

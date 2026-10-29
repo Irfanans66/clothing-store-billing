@@ -210,7 +210,7 @@
 
   <!-- ===== APP NAME TEXT ===== -->
 
-  <!-- "LOCAL" main title -->
+  <!-- "LOACAL" main title -->
   <text x="540" y="720"
     text-anchor="middle"
     fill="white"
@@ -218,7 +218,7 @@
     font-size="130"
     font-weight="900"
     letter-spacing="6"
-    filter="url(#glowText)">LOCAL</text>
+    filter="url(#glowText)">LOACAL</text>
 
   <!-- "BILLING" subtitle with gradient -->
   <text x="540" y="820"

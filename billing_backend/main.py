@@ -63,6 +63,8 @@ seed_super_admin()
 
 
 def seed_default_store():
+    if not settings.SEED_DEMO_STORE:
+        return
     db = SessionLocal()
     try:
         existing = db.query(Store).filter(Store.owner_user == "admin").first()
