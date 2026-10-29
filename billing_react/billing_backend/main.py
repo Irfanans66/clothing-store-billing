@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.core.config import get_settings
 from app.core.database import engine, Base, SessionLocal
 from app.core.security import hash_password
-from app.models.models import SuperAdmin, Store
+from app.models.models import Customer, SuperAdmin, Store
 from app.routers import auth, customers, products, bills, reports, store_users, admin, support, loyalty
 
 settings = get_settings()
@@ -32,6 +32,15 @@ def _migrate_db():
         # TIMESTAMP works on both Postgres and SQLite; DATETIME is SQLite-only.
         "ALTER TABLE customers ADD COLUMN wallet_link_sent_at TIMESTAMP",
         "ALTER TABLE stores ADD COLUMN country VARCHAR(50) DEFAULT 'India'",
+        # Voiding bills (reason + who/when) and whether a bill took stock off the shelf
+        "ALTER TABLE bills ADD COLUMN void_reason TEXT",
+        "ALTER TABLE bills ADD COLUMN voided_by VARCHAR(50)",
+        "ALTER TABLE bills ADD COLUMN voided_at TIMESTAMP",
+        "ALTER TABLE bills ADD COLUMN stock_deducted BOOLEAN DEFAULT FALSE",
+        # Customer dates (YYYY-MM-DD) and clothing preferences
+        "ALTER TABLE customers ADD COLUMN birthday VARCHAR(10)",
+        "ALTER TABLE customers ADD COLUMN anniversary VARCHAR(10)",
+        "ALTER TABLE customers ADD COLUMN preferences TEXT",
     ]
     for stmt in migrations:
         try:
@@ -42,6 +51,25 @@ def _migrate_db():
     db.close()
 
 _migrate_db()
+
+
+def _backfill_tiers():
+    """Give existing customers the tier their spend has earned (upgrade only; safe to repeat)."""
+    from app.routers.customers import tier_for_spend
+    db = SessionLocal()
+    try:
+        for c in db.query(Customer).all():
+            tier = tier_for_spend(c.total_purchase or 0, c.member_type)
+            if tier != c.member_type:
+                c.member_type = tier
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+_backfill_tiers()
 
 
 # ── Seed super admin if not exists ───────────────────────────────────────────

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Avatar, Typography, Button, Dropdown, Tag, Space, Grid } from 'antd'
+import { Layout, Menu, Avatar, Typography, Button, Dropdown, Tag, Space, Grid, Spin } from 'antd'
 import {
   DashboardOutlined, ShoppingCartOutlined, FileTextOutlined,
   UserOutlined, ShopOutlined, BarcodeOutlined, BarChartOutlined,
@@ -352,7 +352,7 @@ export default function AppLayout() {
 
           <OfflineBanner />
           <Content style={{ margin: '24px', minHeight: 'calc(100vh - 56px)' }}>
-            <Outlet />
+            <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spin /></div>}><Outlet /></Suspense>
           </Content>
         </Layout>
         <PaymentMonitor />
@@ -381,7 +381,7 @@ export default function AppLayout() {
         <OfflineBanner />
         <PaymentMonitor />
         <div style={{ padding: '14px 14px 0' }}>
-          <Outlet />
+          <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spin /></div>}><Outlet /></Suspense>
         </div>
       </div>
 

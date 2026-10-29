@@ -12,7 +12,7 @@ import {
 } from '@ant-design/icons'
 import { QRCodeSVG } from 'qrcode.react'
 import {
-  getCustomers, createCustomer, getProduct, getProducts, getBills,
+  getCustomers, getCustomer, createCustomer, getProduct, getProducts, getBills,
   createBill, getStoreProfile, getPublicReceiptUrl,
   getLoyaltyProgram, getCustomerLoyalty,
 } from '../api/client'
@@ -53,9 +53,10 @@ function writeStore(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* storage unavailable */ }
 }
 
+// Same rounding as the backend: GST per line to the paisa, grand total half-up to the rupee
 function lineFor(item, qty) {
   const sub  = Math.round(item.selling_price * qty)
-  const gamt = Math.round(sub * item.gst_pct / 100)
+  const gamt = Math.round(sub * item.gst_pct) / 100
   return { ...item, qty, subtotal: sub, gst_amt: gamt, item_total: sub + gamt }
 }
 
@@ -172,6 +173,12 @@ export default function NewBill() {
   const searchTimer  = useRef(null)
 
   useEffect(() => {
+    const preselect = searchParams.get('customer')
+    if (preselect) {
+      getCustomer(preselect)
+        .then((c) => { setCustomer(c); setWalkIn(false); setCustSearch(c.name) })
+        .catch(() => message.error('Could not load that customer'))
+    }
     getStoreProfile().then(setStoreProfile).catch(() => {})
     getLoyaltyProgram().then(setLoyaltyProgram).catch(() => {})
     // Pre-load products and customers into offline cache
@@ -427,7 +434,7 @@ export default function NewBill() {
   const effRedeemPts  = Math.max(0, Math.min(redeemPts, maxRedeemPts))
   const loyDisc       = effRedeemPts
   const adjSub = rawSub - disc - loyDisc
-  const adjGst = rawSub > 0 ? Math.round(rawGst / rawSub * adjSub) : 0
+  const adjGst = rawSub > 0 ? Math.round(rawGst / rawSub * adjSub * 100) / 100 : 0
   const grand  = Math.round(adjSub + adjGst)
   const realCustomer = customer && customer.customer_id !== 'WALKIN'
   const earnPts = loyaltyProgram?.enabled

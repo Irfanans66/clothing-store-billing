@@ -97,6 +97,9 @@ class Customer(Base):
     notes           = Column(Text)
     wallet_object_id     = Column(String(120), nullable=True)
     wallet_link_sent_at  = Column(DateTime, nullable=True)
+    birthday        = Column(String(10), nullable=True)    # YYYY-MM-DD
+    anniversary     = Column(String(10), nullable=True)    # YYYY-MM-DD
+    preferences     = Column(Text, nullable=True)          # e.g. "Kurta M, prefers cotton"
     created_at      = Column(DateTime, default=_now)
     updated_at      = Column(DateTime, default=_now, onupdate=_now)
 
@@ -175,6 +178,10 @@ class Bill(Base):
     share_token = Column(String(36), nullable=True, index=True)
     loyalty_earned_pts   = Column(Integer, default=0)
     loyalty_redeemed_pts = Column(Integer, default=0)
+    void_reason    = Column(Text, nullable=True)
+    voided_by      = Column(String(50), nullable=True)
+    voided_at      = Column(DateTime, nullable=True)
+    stock_deducted = Column(Boolean, default=False)   # bills before stock tracking never deducted stock
     created_at = Column(DateTime, default=datetime.utcnow)
     # Relationship
 

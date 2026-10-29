@@ -184,6 +184,9 @@ class CustomerCreate(BaseModel):
     gst_no: Optional[str] = ""
     member_type: str = "Regular"
     notes: Optional[str] = ""
+    birthday: Optional[str] = None
+    anniversary: Optional[str] = None
+    preferences: Optional[str] = ""
 
 class CustomerUpdate(BaseModel):
     name: Optional[str] = None
@@ -197,6 +200,9 @@ class CustomerUpdate(BaseModel):
     member_type: Optional[str] = None
     loyalty_pts: Optional[int] = None
     notes: Optional[str] = None
+    birthday: Optional[str] = None
+    anniversary: Optional[str] = None
+    preferences: Optional[str] = None
 
 class CustomerOut(BaseModel):
     model_config = {"from_attributes": True}
@@ -217,7 +223,21 @@ class CustomerOut(BaseModel):
     member_since: Optional[str]
     member_type: str
     notes: Optional[str]
+    birthday: Optional[str] = None
+    anniversary: Optional[str] = None
+    preferences: Optional[str] = None
+    last_visit: Optional[str] = None     # filled by the list endpoint
+    visits: int = 0
     created_at: Optional[datetime]
+
+
+class CustomerMerge(BaseModel):
+    keep_id: str
+    merge_id: str
+
+
+class LinkCustomer(BaseModel):
+    customer_id: str
 
 
 # ── Products ──────────────────────────────────────────────────────────────────
@@ -387,6 +407,9 @@ class BillOut(BaseModel):
     loyalty_earned_pts: int = 0
     loyalty_redeemed_pts: int = 0
     wallet_link: Optional[str] = None  # Only populated on customer's first bill (Add to Google Wallet URL)
+    void_reason: Optional[str] = None
+    voided_by: Optional[str] = None
+    voided_at: Optional[datetime] = None
     created_at: Optional[datetime]
     items: List[BillItemOut] = []
     returns: List["ReturnOut"] = []
@@ -397,12 +420,30 @@ class BillSummary(BaseModel):
     id: int
     bill_no: str
     bill_date: Optional[str]
+    bill_time: Optional[str] = None
+    customer_id: Optional[str] = None
     customer_name: Optional[str]
+    phone: Optional[str] = None
     grand_total: float
     amount_paid: float = 0.0
     change_amt: float = 0.0
     payment_mode: Optional[str]
     status: Optional[str]
+    cashier: Optional[str] = None
+    void_reason: Optional[str] = None
+    share_token: Optional[str] = None
+
+
+class VoidRequest(BaseModel):
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def reason_required(cls, v: str) -> str:
+        v = (v or "").strip()
+        if len(v) < 3:
+            raise ValueError("Please give a reason for cancelling this bill")
+        return v
 
 
 # ── Bill Returns ─────────────────────────────────────────────────────────────

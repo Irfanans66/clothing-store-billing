@@ -4,6 +4,7 @@ app/routers/bills.py
 import datetime
 import io
 import uuid
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional
 from urllib.parse import quote
 
@@ -23,11 +24,20 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, text
 
 from app.core.database import get_db
-from app.core.deps import require_store_access
+from app.core.deps import require_store_access, require_admin
 from app.models.models import Bill, BillItem, BillReturn, BillReturnItem, Customer, LoyaltyProgram, Product, Store
-from app.schemas.schemas import BillCreate, BillOut, BillSummary, MessageResponse, ReturnRequest, ReturnOut
+from app.schemas.schemas import BillCreate, BillOut, BillSummary, LinkCustomer, MessageResponse, ReturnRequest, ReturnOut, VoidRequest
+from app.routers.customers import tier_for_spend
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
+
+
+WALK_IN = "Walk-in"
+
+
+def _round_rupee(x: float) -> int:
+    """Round half up to whole rupees (Python's round() is banker's rounding: round(806.5) == 806)."""
+    return int(Decimal(str(x)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _next_bill_no(db: Session, store_code: str) -> str:
@@ -69,7 +79,7 @@ def _compute_bill(items_in, discount: float, discount_type: str, amount_paid: fl
     disc_amt     = round(user_disc + loyalty_disc, 2)
     adj_sub      = round(raw_sub - disc_amt, 2)
     adj_gst      = round((raw_gst / raw_sub * adj_sub) if raw_sub else 0, 2)
-    grand        = round(adj_sub + adj_gst)
+    grand        = _round_rupee(adj_sub + adj_gst)
     change       = round(amount_paid - grand, 2)
 
     # Allow underpayment only when Credit line is involved.
@@ -1005,7 +1015,7 @@ def create_bill(
             bill_date     = bill_date,
             bill_time     = bill_time,
             customer_id   = payload.customer_id   or "WALKIN",
-            customer_name = payload.customer_name or "Walk-in",
+            customer_name = WALK_IN if (payload.customer_id or "WALKIN") == "WALKIN" else (payload.customer_name or WALK_IN),
             phone         = payload.phone         or "",
             subtotal      = raw_sub,
             discount      = round(user_disc + loyalty_disc, 2),  # combined for legacy reports
@@ -1021,9 +1031,20 @@ def create_bill(
             share_token   = token,
             loyalty_earned_pts   = earn_pts,
             loyalty_redeemed_pts = redeemed_pts_actual,
+            stock_deducted       = True,
         )
         db.add(bill)
         db.flush()
+
+        # Take sold items off the shelf (custom/unlisted items have no product row)
+        for li in line_items:
+            if str(li["item_id"]).startswith("CUSTOM"):
+                continue
+            prod = db.query(Product).filter(
+                Product.store_code == sc, Product.item_id == li["item_id"],
+            ).first()
+            if prod:
+                prod.stock_qty = max(0, (prod.stock_qty or 0) - int(li["qty"]))
 
         for li in line_items:
             db.execute(
@@ -1042,6 +1063,7 @@ def create_bill(
 
         if customer:
             customer.total_purchase = round((customer.total_purchase or 0) + grand, 2)
+            customer.member_type = tier_for_spend(customer.total_purchase, customer.member_type)
             # Apply loyalty: deduct redeemed, add earned. If no program, no change.
             new_pts = (customer.loyalty_pts or 0) - redeemed_pts_actual + earn_pts
             customer.loyalty_pts = max(0, new_pts)
@@ -1094,6 +1116,7 @@ def create_bill(
         "change_amt": bill.change_amt, "payment_mode": bill.payment_mode,
         "cashier": bill.cashier, "status": bill.status, "notes": bill.notes,
         "share_token": bill.share_token, "created_at": bill.created_at,
+        "void_reason": bill.void_reason, "voided_by": bill.voided_by, "voided_at": bill.voided_at,
         "loyalty_earned_pts": bill.loyalty_earned_pts or 0,
         "loyalty_redeemed_pts": bill.loyalty_redeemed_pts or 0,
         "wallet_link": wallet_link,
@@ -1108,36 +1131,127 @@ def create_bill(
     }
 
 
-# ── GET /bills ─────────────────────────────────────────────────────────────────
-@router.get("/", response_model=List[BillSummary])
-def list_bills(
-    date: Optional[str]         = Query(None),
-    customer: Optional[str]     = Query(None),
-    customer_id: Optional[str]  = Query(None),
-    payment_mode: Optional[str] = Query(None),
-    date_from: Optional[str]    = Query(None, description="YYYY-MM-DD, inclusive"),
-    date_to: Optional[str]      = Query(None, description="YYYY-MM-DD, inclusive"),
-    category: Optional[str]     = Query(None, description="'|'-separated category spellings"),
-    skip: int = 0,
-    limit: int = 100,
-    identity: dict = Depends(require_store_access),
-    db: Session = Depends(get_db),
-):
-    sc = identity["store_code"]
-    q  = db.query(Bill).filter(Bill.store_code == sc)
-    if date:         q = q.filter(Bill.bill_date.like(f"%{date}%"))
-    if customer:     q = q.filter(Bill.customer_name.ilike(f"%{customer}%"))
-    if customer_id:  q = q.filter(Bill.customer_id == customer_id)
-    if payment_mode: q = q.filter(Bill.payment_mode == payment_mode)
-    if date_from:    q = q.filter(Bill.bill_date >= date_from)
-    if date_to:      q = q.filter(Bill.bill_date <= date_to)
+# ── GET /bills (+ /bills/summary) ─────────────────────────────────────────────
+PAY_GROUPS = {"cash", "upi", "card", "credit", "split"}
+
+
+def _filtered_bills(db: Session, sc: str, *, q=None, date=None, customer=None, customer_id=None,
+                    payment_mode=None, pay=None, date_from=None, date_to=None, category=None,
+                    due_only=False, cashier=None, include_void=True):
+    query = db.query(Bill).filter(Bill.store_code == sc)
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.filter(or_(Bill.bill_no.ilike(like), Bill.customer_name.ilike(like), Bill.phone.ilike(like)))
+    if date:         query = query.filter(Bill.bill_date.like(f"%{date}%"))
+    if customer:     query = query.filter(Bill.customer_name.ilike(f"%{customer}%"))
+    if customer_id:  query = query.filter(Bill.customer_id == customer_id)
+    if payment_mode: query = query.filter(Bill.payment_mode == payment_mode)
+    if pay in PAY_GROUPS:
+        mode = Bill.payment_mode
+        if pay == "cash":     query = query.filter(mode.ilike("%cash%"))
+        elif pay == "upi":    query = query.filter(mode.ilike("%upi%"))
+        elif pay == "card":   query = query.filter(or_(mode.ilike("%card%"), mode.ilike("%net banking%")))
+        elif pay == "credit": query = query.filter(or_(mode == "Credit", mode.ilike("%+credit"), Bill.status == "Credit"))
+        elif pay == "split":  query = query.filter(mode.like("%+%"))
+    if date_from:    query = query.filter(Bill.bill_date >= date_from)
+    if date_to:      query = query.filter(Bill.bill_date <= date_to)
     if category is not None:
         names = category.split("|")
         cond = BillItem.category.in_(names)
         if "" in names or "Uncategorized" in names:
             cond = or_(cond, BillItem.category.is_(None), BillItem.category == "")
-        q = q.filter(Bill.id.in_(db.query(BillItem.bill_id).filter(BillItem.store_code == sc, cond)))
-    return q.order_by(Bill.id.desc()).offset(skip).limit(limit).all()
+        query = query.filter(Bill.id.in_(db.query(BillItem.bill_id).filter(BillItem.store_code == sc, cond)))
+    if due_only:     query = query.filter(Bill.change_amt < 0, Bill.status != "Void")
+    if cashier:      query = query.filter(Bill.cashier == cashier)
+    if not include_void: query = query.filter(Bill.status != "Void")
+    return query
+
+
+def _summary_row(b: Bill) -> dict:
+    walk_in = (b.customer_id or "WALKIN") == "WALKIN" or (b.customer_name or "").strip().lower() in ("walk-in", "walkin", "")
+    return {
+        "id": b.id, "bill_no": b.bill_no, "bill_date": b.bill_date, "bill_time": b.bill_time,
+        "customer_id": b.customer_id, "customer_name": WALK_IN if walk_in else b.customer_name,
+        "phone": b.phone, "grand_total": b.grand_total, "amount_paid": b.amount_paid or 0,
+        "change_amt": b.change_amt or 0, "payment_mode": b.payment_mode, "status": b.status,
+        "cashier": b.cashier, "void_reason": b.void_reason, "share_token": b.share_token,
+    }
+
+
+@router.get("/", response_model=List[BillSummary])
+def list_bills(
+    q: Optional[str]            = Query(None, description="Bill no, customer name or phone"),
+    date: Optional[str]         = Query(None),
+    customer: Optional[str]     = Query(None),
+    customer_id: Optional[str]  = Query(None),
+    payment_mode: Optional[str] = Query(None),
+    pay: Optional[str]          = Query(None, description="cash | upi | card | credit | split"),
+    date_from: Optional[str]    = Query(None, description="YYYY-MM-DD, inclusive"),
+    date_to: Optional[str]      = Query(None, description="YYYY-MM-DD, inclusive"),
+    category: Optional[str]     = Query(None, description="'|'-separated category spellings"),
+    due_only: bool              = Query(False),
+    cashier: Optional[str]      = Query(None),
+    sort: str                   = Query("-date", description="date | total | due, '-' prefix = descending"),
+    skip: int = 0,
+    limit: int = Query(100, le=5000),
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    sc = identity["store_code"]
+    query = _filtered_bills(db, sc, q=q, date=date, customer=customer, customer_id=customer_id,
+                            payment_mode=payment_mode, pay=pay, date_from=date_from, date_to=date_to,
+                            category=category, due_only=due_only, cashier=cashier)
+    desc = sort.startswith("-")
+    key = sort.lstrip("-")
+    if key == "total":
+        order = [Bill.grand_total.desc() if desc else Bill.grand_total.asc(), Bill.id.desc()]
+    elif key == "due":   # most owed first when descending (change_amt is negative for dues)
+        order = [Bill.change_amt.asc() if desc else Bill.change_amt.desc(), Bill.id.desc()]
+    else:
+        order = [Bill.bill_date.desc(), Bill.id.desc()] if desc else [Bill.bill_date.asc(), Bill.id.asc()]
+    return [_summary_row(b) for b in query.order_by(*order).offset(skip).limit(limit).all()]
+
+
+@router.get("/summary")
+def bills_summary(
+    q: Optional[str]            = Query(None),
+    customer: Optional[str]     = Query(None),
+    customer_id: Optional[str]  = Query(None),
+    pay: Optional[str]          = Query(None),
+    date_from: Optional[str]    = Query(None),
+    date_to: Optional[str]      = Query(None),
+    category: Optional[str]     = Query(None),
+    due_only: bool              = Query(False),
+    cashier: Optional[str]      = Query(None),
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    """Totals for the same filters as GET /bills (voided bills counted separately)."""
+    from sqlalchemy import func
+    sc = identity["store_code"]
+    base = _filtered_bills(db, sc, q=q, customer=customer, customer_id=customer_id, pay=pay,
+                           date_from=date_from, date_to=date_to, category=category,
+                           due_only=due_only, cashier=cashier)
+    live = base.filter(Bill.status != "Void")
+    count, total = live.with_entities(func.count(Bill.id), func.coalesce(func.sum(Bill.grand_total), 0)).one()
+    due = sum(-c for (c,) in live.with_entities(Bill.change_amt).filter(Bill.change_amt < 0).all())
+    by_mode = {"Cash": 0.0, "UPI": 0.0, "Card": 0.0, "Credit": 0.0, "Split": 0.0}
+    for mode, amt in live.with_entities(Bill.payment_mode, Bill.grand_total).all():
+        m = (mode or "").lower()
+        if "+" in m and not m.endswith("+credit"): k = "Split"
+        elif m == "credit" or m.endswith("+credit"): k = "Credit"
+        elif "upi" in m: k = "UPI"
+        elif "card" in m or "net banking" in m: k = "Card"
+        else: k = "Cash"
+        by_mode[k] += float(amt or 0)
+    cashiers = [c for (c,) in db.query(Bill.cashier).filter(Bill.store_code == sc, Bill.cashier.isnot(None))
+                .distinct().order_by(Bill.cashier).all()]
+    return {
+        "count": int(count), "total": round(float(total), 2), "due": round(due, 2),
+        "by_mode": {k: round(v, 2) for k, v in by_mode.items() if v},
+        "voided": base.filter(Bill.status == "Void").count(),
+        "cashiers": cashiers,
+    }
 
 
 # ── GET /bills/public/{share_token} — no auth, for WhatsApp PDF links ──────────
@@ -1222,6 +1336,7 @@ def get_bill(
         "change_amt": bill.change_amt, "payment_mode": bill.payment_mode,
         "cashier": bill.cashier, "status": bill.status, "notes": bill.notes,
         "share_token": bill.share_token, "created_at": bill.created_at,
+        "void_reason": bill.void_reason, "voided_by": bill.voided_by, "voided_at": bill.voided_at,
         "loyalty_earned_pts": bill.loyalty_earned_pts or 0,
         "loyalty_redeemed_pts": bill.loyalty_redeemed_pts or 0,
         "items": [
@@ -1416,24 +1531,88 @@ def return_bill_items(
 
 
 # ── DELETE /bills/{bill_no} ────────────────────────────────────────────────────
-@router.delete("/{bill_no}", response_model=MessageResponse)
+@router.post("/{bill_no}/void", response_model=MessageResponse)
 def void_bill(
     bill_no: str,
-    identity: dict = Depends(require_store_access),
+    payload: VoidRequest,
+    identity: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    if identity["role"] not in ("Admin", "Manager"):
-        raise HTTPException(status_code=403, detail="Admin/Manager required.")
-
+    """Cancel a bill: it stays in history (struck through) but leaves reports, stock and balances."""
     sc   = identity["store_code"]
     bill = (
         db.query(Bill)
-        .filter(Bill.store_code == sc, Bill.bill_no == bill_no, Bill.status.in_(["Paid", "Credit"]))
+        .filter(Bill.store_code == sc, Bill.bill_no == bill_no,
+                Bill.status.in_(["Paid", "Credit", "Partial Return"]))
         .first()
     )
     if not bill:
-        raise HTTPException(status_code=404, detail="Bill not found.")
+        raise HTTPException(status_code=404, detail="Bill not found, or it is already cancelled / fully returned.")
 
-    bill.status = "Void"
+    # Quantities already returned were put back on the shelf by the return itself
+    returned: dict[int, int] = {}
+    for ri in (db.query(BillReturnItem).join(BillReturn, BillReturnItem.return_id == BillReturn.id)
+               .filter(BillReturn.bill_id == bill.id).all()):
+        returned[ri.bill_item_id] = returned.get(ri.bill_item_id, 0) + ri.return_qty
+    refunded = sum(r.refund_amount or 0 for r in db.query(BillReturn).filter(BillReturn.bill_id == bill.id).all())
+
+    if bill.stock_deducted:
+        for bi in db.query(BillItem).filter(BillItem.bill_id == bill.id).all():
+            keep = (bi.qty or 0) - returned.get(bi.id, 0)
+            if keep <= 0 or str(bi.item_id).startswith("CUSTOM"):
+                continue
+            prod = db.query(Product).filter(Product.store_code == sc, Product.item_id == bi.item_id).first()
+            if prod:
+                prod.stock_qty = (prod.stock_qty or 0) + keep
+
+    if bill.customer_id and bill.customer_id != "WALKIN":
+        cust = db.query(Customer).filter(Customer.store_code == sc, Customer.customer_id == bill.customer_id).first()
+        if cust:
+            cust.total_purchase = max(0.0, round((cust.total_purchase or 0) - (bill.grand_total - refunded), 2))
+            if bill.change_amt and bill.change_amt < 0:
+                cust.credit_balance = max(0.0, round((cust.credit_balance or 0) + bill.change_amt, 2))
+            cust.loyalty_pts = max(0, (cust.loyalty_pts or 0) - (bill.loyalty_earned_pts or 0)
+                                   + (bill.loyalty_redeemed_pts or 0))
+
+    bill.status      = "Void"
+    bill.void_reason = payload.reason
+    bill.voided_by   = identity["username"]
+    bill.voided_at   = datetime.datetime.now(datetime.timezone.utc)
     db.commit()
-    return MessageResponse(message=f"Bill {bill_no} has been voided.")
+    return MessageResponse(message=f"Bill {bill_no} has been cancelled.")
+
+
+@router.post("/{bill_no}/link-customer", response_model=MessageResponse)
+def link_bill_customer(
+    bill_no: str,
+    payload: LinkCustomer,
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    """Attach a bill whose customer isn't on file to a real customer, so its due is tracked."""
+    sc = identity["store_code"]
+    bill = db.query(Bill).filter(Bill.store_code == sc, Bill.bill_no == bill_no).first()
+    cust = db.query(Customer).filter(Customer.store_code == sc, Customer.customer_id == payload.customer_id).first()
+    if not bill or not cust:
+        raise HTTPException(status_code=404, detail="Bill or customer not found.")
+    known = db.query(Customer).filter(Customer.store_code == sc, Customer.customer_id == bill.customer_id).first()
+    if known:
+        raise HTTPException(status_code=400, detail=f"{bill_no} already belongs to {known.name}.")
+    bill.customer_id, bill.customer_name, bill.phone = cust.customer_id, cust.name, cust.phone or bill.phone
+    if bill.status != "Void":
+        cust.total_purchase = round((cust.total_purchase or 0) + (bill.grand_total or 0), 2)
+        cust.member_type = tier_for_spend(cust.total_purchase, cust.member_type)
+        if (bill.change_amt or 0) < 0:
+            cust.credit_balance = round((cust.credit_balance or 0) - bill.change_amt, 2)
+    db.commit()
+    return MessageResponse(message=f"{bill_no} is now linked to {cust.name}.")
+
+
+@router.delete("/{bill_no}", response_model=MessageResponse)
+def void_bill_legacy(
+    bill_no: str,
+    identity: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Older clients: cancel without a reason."""
+    return void_bill(bill_no, VoidRequest(reason="Cancelled (no reason given)"), identity, db)

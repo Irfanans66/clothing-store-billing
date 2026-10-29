@@ -41,6 +41,13 @@ export const getCustomers = (params = {}) => api.get('/customers/', { params })
 export const getCustomer = (id) => api.get(`/customers/${id}`)
 export const createCustomer = (data) => api.post('/customers/', data)
 export const updateCustomer = (id, data) => api.patch(`/customers/${id}`, data)
+export const deleteCustomer = (id) => api.delete(`/customers/${id}`)
+export const getCustomerProfile = (id) => api.get(`/customers/${id}/profile`)
+export const getDuplicateCustomers = () => api.get('/customers/duplicates')
+export const mergeCustomers = (keepId, mergeId) => api.post('/customers/merge', { keep_id: keepId, merge_id: mergeId })
+export const getUnlinkedDues = () => api.get('/customers/unlinked-dues')
+export const linkBillCustomer = (billNo, customerId) => api.post(`/bills/${billNo}/link-customer`, { customer_id: customerId })
+export const importCustomers = (rows) => api.post('/customers/import', rows, { timeout: 60000 })
 export const recordCreditPayment = (id, amount, paymentMode, notes) =>
   api.post(`/customers/${id}/record-payment`, null, {
     params: { amount, payment_mode: paymentMode, notes },
@@ -59,7 +66,8 @@ export const getBills = (params = {}) => api.get('/bills/', { params })
 export const getBill = (billNo) => api.get(`/bills/${billNo}`)
 export const createBill = (data) => api.post('/bills/', data)
 export const returnBillItems = (billNo, data) => api.post(`/bills/${billNo}/return`, data)
-export const voidBill = (billNo) => api.delete(`/bills/${billNo}`)
+export const voidBill = (billNo, reason) => api.post(`/bills/${billNo}/void`, { reason })
+export const getBillsSummary = (params = {}) => api.get('/bills/summary', { params })
 export const getReceiptPdfUrl = (billNo) =>
   `${BASE}/bills/${billNo}/receipt-pdf`
 export const getPublicReceiptUrl = (shareToken) =>

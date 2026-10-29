@@ -1,23 +1,30 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { ConfigProvider, theme as antTheme } from 'antd'
+import { ConfigProvider, Spin, theme as antTheme } from 'antd'
 import { useAuthStore } from './store/authStore'
 import { useOfflineStore } from './store/offlineStore'
 import AppLayout from './components/AppLayout'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import NewBill from './pages/NewBill'
-import BillHistory from './pages/BillHistory'
-import Customers from './pages/Customers'
-import Products from './pages/Products'
-import BarcodeLabels from './pages/BarcodeLabels'
-import Reports from './pages/Reports'
-import Team from './pages/Team'
-import Settings from './pages/Settings'
-import SuperAdmin from './pages/SuperAdmin'
-import Help from './pages/Help'
-import Privacy from './pages/Privacy'
-import Terms from './pages/Terms'
+
+// Each page is its own chunk, loaded when first opened (keeps the main bundle small;
+// the PWA precaches every chunk so they still work offline)
+const Login         = lazy(() => import('./pages/Login'))
+const Dashboard     = lazy(() => import('./pages/Dashboard'))
+const NewBill       = lazy(() => import('./pages/NewBill'))
+const BillHistory   = lazy(() => import('./pages/BillHistory'))
+const Customers     = lazy(() => import('./pages/Customers'))
+const Products      = lazy(() => import('./pages/Products'))
+const BarcodeLabels = lazy(() => import('./pages/BarcodeLabels'))
+const Reports       = lazy(() => import('./pages/Reports'))
+const Team          = lazy(() => import('./pages/Team'))
+const Settings      = lazy(() => import('./pages/Settings'))
+const SuperAdmin    = lazy(() => import('./pages/SuperAdmin'))
+const Help          = lazy(() => import('./pages/Help'))
+const Privacy       = lazy(() => import('./pages/Privacy'))
+const Terms         = lazy(() => import('./pages/Terms'))
+
+const pageFallback = (
+  <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spin /></div>
+)
 
 function PrivateRoute({ children }) {
   const token = useAuthStore((s) => s.token)
@@ -55,6 +62,7 @@ export default function App() {
       }}
     >
       <BrowserRouter>
+        <Suspense fallback={pageFallback}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/privacy" element={<Privacy />} />
@@ -82,6 +90,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </ConfigProvider>
   )

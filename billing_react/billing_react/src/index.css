@@ -234,7 +234,7 @@ body {
   border: none !important;
   overflow: hidden;
 }
-.ant-modal-header { background: transparent !important; border-bottom: 1px solid var(--bg-dark) !important; }
+.ant-modal-header { background: transparent !important; border-bottom: 1px solid var(--bg-dark) !important; padding-bottom: 12px !important; margin-bottom: 16px !important; }
 .ant-modal-title { color: var(--text) !important; }
 
 /* Drawer */
