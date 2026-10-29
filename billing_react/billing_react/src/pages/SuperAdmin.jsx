@@ -10,7 +10,7 @@ import {
 import {
   adminOverview, adminListStores, adminToggleStore,
   adminUpdateStore, adminDailyRevenue, adminRevenueByStore,
-  adminListTickets, adminReplyTicket,
+  adminListTickets, adminReplyTicket, adminDeleteTicket,
 } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 
@@ -162,7 +162,8 @@ export default function SuperAdmin() {
       ),
     },
     { title: 'User', dataIndex: 'username', key: 'username', width: 100 },
-    { title: 'Subject', dataIndex: 'subject', key: 'subject', ellipsis: true },
+    { title: 'Subject', dataIndex: 'subject', key: 'subject', ellipsis: true,
+      render: (v, r) => <span>{r.category && <Tag style={{ marginRight: 6 }}>{r.category}</Tag>}{v}{r.screenshot && ' 📎'}</span> },
     { title: 'Status', dataIndex: 'status', key: 'status', width: 110,
       render: (v) => <Tag color={TICKET_STATUS_COLOR[v] || 'default'}>{v}</Tag> },
     { title: 'Date', dataIndex: 'created_at', key: 'created_at', width: 130,
@@ -174,7 +175,7 @@ export default function SuperAdmin() {
           size="small" type="primary" icon={<MessageOutlined />}
           onClick={() => {
             setReplyModal(r)
-            replyForm.setFieldsValue({ status: r.status, admin_reply: r.admin_reply || '' })
+            replyForm.setFieldsValue({ status: r.status, admin_reply: '' })
           }}
         >
           Reply
@@ -429,11 +430,27 @@ export default function SuperAdmin() {
         width={560}
       >
         {replyModal && (
-          <div style={{ marginBottom: 16, background: '#f5f5f5', borderRadius: 8, padding: '10px 14px' }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              From {replyModal.username} ({replyModal.store_name}):
-            </Text>
-            <p style={{ margin: '4px 0 0' }}>{replyModal.message}</p>
+          <div style={{ marginBottom: 16, maxHeight: 360, overflowY: 'auto' }}>
+            <div style={{ background: 'rgba(47,102,144,0.08)', borderRadius: 8, padding: '10px 14px' }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                From {replyModal.username} ({replyModal.store_name}){replyModal.category ? ` · ${replyModal.category}` : ''}:
+              </Text>
+              <p style={{ margin: '4px 0 0', whiteSpace: 'pre-wrap' }}>{replyModal.message}</p>
+              {replyModal.screenshot && (
+                <a href={replyModal.screenshot} target="_blank" rel="noreferrer">
+                  <img src={replyModal.screenshot} alt="Attached screenshot" style={{ maxWidth: '100%', maxHeight: 220, marginTop: 8, borderRadius: 6 }} />
+                </a>
+              )}
+            </div>
+            {(replyModal.messages || []).map((m) => (
+              <div key={m.id} style={{ marginTop: 8, borderRadius: 8, padding: '8px 12px',
+                background: m.author === 'support' ? 'rgba(30,132,73,0.1)' : 'rgba(47,102,144,0.08)' }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {m.author === 'support' ? 'You (support)' : m.username} · {m.created_at ? new Date(m.created_at).toLocaleString() : ''}
+                </Text>
+                <p style={{ margin: '2px 0 0', whiteSpace: 'pre-wrap' }}>{m.message}</p>
+              </div>
+            ))}
           </div>
         )}
         <Form form={replyForm} layout="vertical" onFinish={handleReplySave}>
@@ -448,6 +465,13 @@ export default function SuperAdmin() {
             <TextArea rows={4} placeholder="Type your reply here…" />
           </Form.Item>
           <Button type="primary" htmlType="submit" block>Send Reply</Button>
+          <Button danger type="text" block style={{ marginTop: 8 }} onClick={() => Modal.confirm({
+            title: `Delete ticket #${replyModal?.id}?`, content: 'Use this for test or spam tickets. This can’t be undone.',
+            okText: 'Delete', okButtonProps: { danger: true },
+            onOk: () => adminDeleteTicket(replyModal.id)
+              .then(() => { message.success('Ticket deleted'); setReplyModal(null); replyForm.resetFields(); loadTickets() })
+              .catch((err) => message.error(err.message)),
+          })}>Delete ticket</Button>
         </Form>
       </Modal>
     </div>

@@ -2,13 +2,15 @@
 app/routers/support.py
 Support ticket endpoints — store users submit concerns; super admin replies.
 """
+import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_store_access
-from app.models.models import Store, SupportTicket
-from app.schemas.schemas import SupportTicketCreate, SupportTicketOut
+from app.models.models import Store, SupportMessage, SupportTicket
+from app.schemas.schemas import MessageResponse, SupportFollowUp, SupportTicketCreate, SupportTicketOut
 
 router = APIRouter(prefix="/support", tags=["Support"])
 
@@ -27,6 +29,8 @@ def submit_ticket(
         username=identity["username"],
         subject=payload.subject.strip(),
         message=payload.message.strip(),
+        category=payload.category,
+        screenshot=payload.screenshot,
     )
     db.add(ticket)
     db.commit()
@@ -45,3 +49,40 @@ def my_tickets(
         .order_by(SupportTicket.created_at.desc())
         .all()
     )
+
+def _own_ticket(db: Session, identity: dict, ticket_id: int) -> SupportTicket:
+    t = db.query(SupportTicket).filter(SupportTicket.id == ticket_id,
+                                       SupportTicket.store_code == identity["store_code"]).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Ticket not found.")
+    return t
+
+
+@router.post("/{ticket_id}/reply", response_model=SupportTicketOut)
+def reply_to_ticket(
+    ticket_id: int,
+    payload: SupportFollowUp,
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    """Add a follow-up on an existing ticket instead of opening a new one (re-opens resolved tickets)."""
+    t = _own_ticket(db, identity, ticket_id)
+    db.add(SupportMessage(ticket_id=t.id, author="store", username=identity["username"], message=payload.message))
+    if t.status == "Resolved":
+        t.status = "Open"
+    t.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    db.commit()
+    db.refresh(t)
+    return t
+
+
+@router.delete("/{ticket_id}", response_model=MessageResponse)
+def delete_ticket(
+    ticket_id: int,
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    t = _own_ticket(db, identity, ticket_id)
+    db.delete(t)
+    db.commit()
+    return MessageResponse(message=f"Ticket #{ticket_id} deleted.")

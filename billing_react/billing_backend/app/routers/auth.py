@@ -174,7 +174,13 @@ def update_profile(
     if not store:
         raise HTTPException(status_code=404, detail="Store not found.")
 
-    for field, value in payload.model_dump(exclude_none=True).items():
+    # Only the store owner (Admin) changes store settings; plan and admin notes belong to the Super Admin
+    if identity["role"] != "Admin":
+        raise HTTPException(status_code=403, detail="Only the store Admin can change store settings.")
+    changes = payload.model_dump(exclude_none=True, exclude={"plan", "notes"})
+    if changes.get("logo_data") == "":
+        changes["logo_data"] = None
+    for field, value in changes.items():
         setattr(store, field, value)
 
     db.commit()

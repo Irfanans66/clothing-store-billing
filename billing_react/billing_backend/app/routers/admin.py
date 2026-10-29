@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_superadmin
-from app.models.models import Bill, Customer, Product, Store, SupportTicket
+from app.models.models import Bill, Customer, Product, Store, SupportMessage, SupportTicket
 from app.schemas.schemas import MessageResponse, StorePatchRequest, StoreStat, SupportTicketOut, SupportTicketReply
 
 router = APIRouter(prefix="/admin", tags=["Super Admin"])
@@ -196,8 +196,25 @@ def reply_support_ticket(
         raise HTTPException(status_code=404, detail="Ticket not found")
     if payload.status is not None:
         ticket.status = payload.status
-    if payload.admin_reply is not None:
-        ticket.admin_reply = payload.admin_reply
+    reply = (payload.admin_reply or "").strip()
+    if reply and reply != (ticket.admin_reply or "").strip():
+        # Keep the latest reply on the ticket (older clients read it) and add it to the conversation
+        ticket.admin_reply = reply
+        db.add(SupportMessage(ticket_id=ticket.id, author="support", username="Support", message=reply))
     db.commit()
     db.refresh(ticket)
     return ticket
+
+
+@router.delete("/support-tickets/{ticket_id}", response_model=MessageResponse)
+def delete_support_ticket(
+    ticket_id: int,
+    _: dict = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+):
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    db.delete(ticket)
+    db.commit()
+    return MessageResponse(message=f"Ticket #{ticket_id} deleted.")

@@ -583,14 +583,12 @@ export default function NewBill() {
   // ── After billing ──────────────────────────────────────────────────────────
   async function printLast() {
     try {
-      const paper = localStorage.getItem('receipt_paper_size') || '3inch'
-      await printPdfWithAuth(`/bills/${lastBill.bill_no}/receipt-pdf?paper=${paper}`)
+      await printPdfWithAuth(`/bills/${lastBill.bill_no}/receipt-pdf`)
     } catch (err) { message.error('Print failed: ' + err.message) }
   }
   async function downloadLast() {
     try {
-      const paper = localStorage.getItem('receipt_paper_size') || '3inch'
-      await openPdfWithAuth(`/bills/${lastBill.bill_no}/receipt-pdf?paper=${paper}`, `Receipt_${lastBill.bill_no}.pdf`)
+      await openPdfWithAuth(`/bills/${lastBill.bill_no}/receipt-pdf`, `Receipt_${lastBill.bill_no}.pdf`)
     } catch (err) { message.error('Download failed: ' + err.message) }
   }
   function whatsappLast() {

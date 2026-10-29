@@ -243,8 +243,7 @@ export default function Dashboard() {
 
   async function reprint(b) {
     try {
-      const paper = localStorage.getItem('receipt_paper_size') || '3inch'
-      await printPdfWithAuth(`/bills/${b.bill_no}/receipt-pdf?paper=${paper}`)
+      await printPdfWithAuth(`/bills/${b.bill_no}/receipt-pdf`)
     } catch (err) { message.error(err.message) }
   }
 

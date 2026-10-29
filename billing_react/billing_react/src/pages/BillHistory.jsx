@@ -270,13 +270,12 @@ export default function BillHistory() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const paper = () => localStorage.getItem('receipt_paper_size') || '3inch'
   async function printBill(billNo) {
-    try { await printPdfWithAuth(`/bills/${billNo}/receipt-pdf?paper=${paper()}`) }
+    try { await printPdfWithAuth(`/bills/${billNo}/receipt-pdf`) }
     catch (err) { message.error('Print failed: ' + err.message) }
   }
   async function downloadBill(billNo) {
-    try { await openPdfWithAuth(`/bills/${billNo}/receipt-pdf?paper=${paper()}`, `Receipt_${billNo}.pdf`) }
+    try { await openPdfWithAuth(`/bills/${billNo}/receipt-pdf`, `Receipt_${billNo}.pdf`) }
     catch (err) { message.error('Download failed: ' + err.message) }
   }
   function whatsappBill(b) {

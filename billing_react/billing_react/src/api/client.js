@@ -70,6 +70,8 @@ export const createBill = (data) => api.post('/bills/', data)
 export const returnBillItems = (billNo, data) => api.post(`/bills/${billNo}/return`, data)
 export const voidBill = (billNo, reason) => api.post(`/bills/${billNo}/void`, { reason })
 export const getBillsSummary = (params = {}) => api.get('/bills/summary', { params })
+export const getReceiptPreview = (settings) =>
+  api.post('/bills/receipt-preview', settings, { responseType: 'blob' })
 export const getReceiptPdfUrl = (billNo) =>
   `${BASE}/bills/${billNo}/receipt-pdf`
 export const getPublicReceiptUrl = (shareToken) =>
@@ -92,6 +94,7 @@ export const adminDailyRevenue = () => api.get('/admin/daily-revenue')
 export const adminRevenueByStore = () => api.get('/admin/revenue-by-store')
 export const adminListTickets = (status) => api.get('/admin/support-tickets', { params: status ? { status } : {} })
 export const adminReplyTicket = (id, data) => api.patch(`/admin/support-tickets/${id}`, data)
+export const adminDeleteTicket = (id) => api.delete(`/admin/support-tickets/${id}`)
 
 // ── Loyalty ───────────────────────────────────────────────────────────────────
 export const getLoyaltyProgram = () => api.get('/loyalty/program')
@@ -102,3 +105,5 @@ export const resendWalletLink = (customerId) => api.post(`/loyalty/customer/${cu
 // ── Support / Help ────────────────────────────────────────────────────────────
 export const submitSupportTicket = (data) => api.post('/support/', data)
 export const getMyTickets = () => api.get('/support/')
+export const replyToTicket = (id, message) => api.post(`/support/${id}/reply`, { message })
+export const deleteMyTicket = (id) => api.delete(`/support/${id}`)

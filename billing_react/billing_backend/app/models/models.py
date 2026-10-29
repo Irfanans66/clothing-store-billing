@@ -30,6 +30,13 @@ class Store(Base):
     plan         = Column(String(20), default="Free")
     upi_id       = Column(String(100), nullable=True)
     country      = Column(String(50), default="India")
+    receipt_design      = Column(String(20), default="3inch")
+    receipt_footer      = Column(String(120), nullable=True)
+    receipt_policy      = Column(String(300), nullable=True)
+    receipt_show_gstin  = Column(Boolean, default=True)
+    receipt_show_qr     = Column(Boolean, default=True)
+    receipt_show_points = Column(Boolean, default=True)
+    logo_data           = Column(Text, nullable=True)      # data:image/png;base64,… (small)
     is_active    = Column(Boolean, default=True)
     created_at   = Column(DateTime, default=_now)
     last_login   = Column(DateTime, nullable=True)
@@ -293,5 +300,21 @@ class SupportTicket(Base):
     message     = Column(Text, nullable=False)
     status      = Column(String(20), default="Open")   # Open | In Progress | Resolved
     admin_reply = Column(Text, nullable=True)
+    category    = Column(String(30), nullable=True)    # Billing | Printing | Payments | Account | Other
+    screenshot  = Column(Text, nullable=True)          # data:image/jpeg;base64,… (resized in the browser)
     created_at  = Column(DateTime, default=_now)
     updated_at  = Column(DateTime, default=_now, onupdate=_now)
+
+    messages = relationship("SupportMessage", cascade="all, delete-orphan", order_by="SupportMessage.id")
+
+
+class SupportMessage(Base):
+    """Follow-up messages on a ticket, from the store or from support."""
+    __tablename__ = "support_messages"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    ticket_id  = Column(Integer, ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    author     = Column(String(10), nullable=False)   # store | support
+    username   = Column(String(50))
+    message    = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_now)

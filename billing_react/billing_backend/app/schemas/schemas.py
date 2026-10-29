@@ -3,6 +3,7 @@ app/schemas/schemas.py
 Pydantic v2 request/response schemas for every endpoint.
 """
 from __future__ import annotations
+import re
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
@@ -68,6 +69,13 @@ class StoreOut(BaseModel):
     plan: str
     upi_id: Optional[str] = None
     country: Optional[str] = "India"
+    receipt_design: Optional[str] = "3inch"
+    receipt_footer: Optional[str] = None
+    receipt_policy: Optional[str] = None
+    receipt_show_gstin: Optional[bool] = True
+    receipt_show_qr: Optional[bool] = True
+    receipt_show_points: Optional[bool] = True
+    logo_data: Optional[str] = None
     is_active: bool
     created_at: Optional[datetime]
     last_login: Optional[datetime]
@@ -83,6 +91,50 @@ class StorePatchRequest(BaseModel):
     upi_id: Optional[str] = None
     country: Optional[str] = None
     notes: Optional[str] = None
+    receipt_design: Optional[str] = None
+    receipt_footer: Optional[str] = None
+    receipt_policy: Optional[str] = None
+    receipt_show_gstin: Optional[bool] = None
+    receipt_show_qr: Optional[bool] = None
+    receipt_show_points: Optional[bool] = None
+    logo_data: Optional[str] = None
+
+    @field_validator("gstin")
+    @classmethod
+    def valid_gstin(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip().upper()
+        if v and not re.fullmatch(r"\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]", v):
+            raise ValueError("GSTIN should be 15 characters, like 29ABCDE1234F1Z5")
+        return v
+
+    @field_validator("receipt_design")
+    @classmethod
+    def known_design(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in RECEIPT_DESIGNS:
+            raise ValueError(f"Unknown receipt design: {v}")
+        return v
+
+    @field_validator("logo_data")
+    @classmethod
+    def small_image(cls, v: Optional[str]) -> Optional[str]:
+        if v and (not v.startswith(("data:image/png;base64,", "data:image/jpeg;base64,")) or len(v) > 300_000):
+            raise ValueError("Logo must be a PNG or JPEG under about 200 KB")
+        return v
+
+
+RECEIPT_DESIGNS = {"2inch", "3inch", "3inch-bold", "design1", "design2", "design3", "design4"}
+
+
+class ReceiptPreviewRequest(BaseModel):
+    receipt_design: str = "3inch"
+    receipt_footer: Optional[str] = None
+    receipt_policy: Optional[str] = None
+    receipt_show_gstin: bool = True
+    receipt_show_qr: bool = True
+    receipt_show_points: bool = True
+    logo_data: Optional[str] = None
 
 
 # ── Loyalty Program ───────────────────────────────────────────────────────────
@@ -536,9 +588,47 @@ class StoreStat(BaseModel):
 
 # ── Support Tickets ───────────────────────────────────────────────────────────
 
+SUPPORT_CATEGORIES = {"Billing", "Printing", "Payments", "Account", "Other"}
+
+
 class SupportTicketCreate(BaseModel):
     subject: str
     message: str
+    category: Optional[str] = "Other"
+    screenshot: Optional[str] = None
+
+    @field_validator("category")
+    @classmethod
+    def known_category(cls, v: Optional[str]) -> str:
+        return v if v in SUPPORT_CATEGORIES else "Other"
+
+    @field_validator("screenshot")
+    @classmethod
+    def small_image(cls, v: Optional[str]) -> Optional[str]:
+        if v and (not v.startswith(("data:image/jpeg;base64,", "data:image/png;base64,")) or len(v) > 1_500_000):
+            raise ValueError("Screenshot must be a JPG or PNG under about 1 MB")
+        return v or None
+
+
+class SupportFollowUp(BaseModel):
+    message: str
+
+    @field_validator("message")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("Write a message")
+        return v[:2000]
+
+
+class SupportMessageOut(BaseModel):
+    model_config = {"from_attributes": True}
+    id: int
+    author: str
+    username: Optional[str]
+    message: str
+    created_at: Optional[datetime]
 
 class SupportTicketReply(BaseModel):
     status: Optional[str] = None
@@ -554,6 +644,9 @@ class SupportTicketOut(BaseModel):
     message: str
     status: str
     admin_reply: Optional[str]
+    category: Optional[str] = None
+    screenshot: Optional[str] = None
+    messages: List[SupportMessageOut] = []
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 

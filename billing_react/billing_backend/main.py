@@ -51,6 +51,17 @@ def _migrate_db():
         # Barcode label printing
         "ALTER TABLE products ADD COLUMN last_label_printed TIMESTAMP",
         "ALTER TABLE products ADD COLUMN labels_printed INTEGER DEFAULT 0",
+        # Receipt settings (shared by every device in the store, and used for WhatsApp receipt links)
+        "ALTER TABLE stores ADD COLUMN receipt_design VARCHAR(20) DEFAULT '3inch'",
+        "ALTER TABLE stores ADD COLUMN receipt_footer VARCHAR(120)",
+        "ALTER TABLE stores ADD COLUMN receipt_policy VARCHAR(300)",
+        "ALTER TABLE stores ADD COLUMN receipt_show_gstin BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE stores ADD COLUMN receipt_show_qr BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE stores ADD COLUMN receipt_show_points BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE stores ADD COLUMN logo_data TEXT",
+        # Support tickets: category + optional screenshot
+        "ALTER TABLE support_tickets ADD COLUMN category VARCHAR(30)",
+        "ALTER TABLE support_tickets ADD COLUMN screenshot TEXT",
     ]
     for stmt in migrations:
         try:

@@ -26,7 +26,7 @@ from sqlalchemy import or_, text
 from app.core.database import get_db
 from app.core.deps import require_store_access, require_admin
 from app.models.models import Bill, BillItem, BillReturn, BillReturnItem, Customer, LoyaltyProgram, Product, Store
-from app.schemas.schemas import BillCreate, BillOut, BillSummary, LinkCustomer, MessageResponse, ReturnRequest, ReturnOut, VoidRequest
+from app.schemas.schemas import BillCreate, BillOut, BillSummary, LinkCustomer, MessageResponse, ReceiptPreviewRequest, ReturnRequest, ReturnOut, VoidRequest
 from app.routers.customers import tier_for_spend
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
@@ -151,6 +151,55 @@ def _loyalty_lines(bill, customer):
     return lines
 
 
+DEFAULT_FOOTER = "Thank You... Visit Again !"
+DEFAULT_POLICY = "Exchange within 7 days with receipt"
+
+
+def _receipt_view(store, overrides: Optional[dict] = None):
+    """The store as a receipt sees it: the store's own footer/policy text and show/hide choices applied."""
+    from types import SimpleNamespace
+    o = overrides or {}
+    get = lambda k, d=None: o[k] if k in o else (getattr(store, k, d) if store is not None else d)  # noqa: E731
+    show = lambda k: get(k, True) is not False  # noqa: E731
+    return SimpleNamespace(
+        store_name=get("store_name") or "STORE",
+        address=get("address") or "",
+        phone=get("phone") or "",
+        email=get("email") or "",
+        gstin=(get("gstin") or "") if show("receipt_show_gstin") else "",
+        upi_id=(get("upi_id") or "") if show("receipt_show_qr") else "",
+        notes=(get("receipt_policy") or "").strip() or None,   # Design 1/3 "Terms" box
+        footer=(get("receipt_footer") or "").strip() or DEFAULT_FOOTER,
+        policy=(get("receipt_policy") or "").strip() or DEFAULT_POLICY,
+        logo_data=get("logo_data"),
+        show_points=show("receipt_show_points"),
+    )
+
+
+def _bill_view(bill, show_points: bool):
+    """Hide loyalty point lines when the store turned them off (amounts are unaffected)."""
+    if show_points:
+        return bill
+
+    class _NoPoints:
+        def __getattr__(self, name):
+            if name in ("loyalty_earned_pts", "loyalty_redeemed_pts"):
+                return 0
+            return getattr(bill, name)
+    return _NoPoints()
+
+
+def _logo_reader(logo_data: Optional[str]):
+    if not logo_data or "," not in logo_data:
+        return None
+    try:
+        import base64
+        from reportlab.lib.utils import ImageReader
+        return ImageReader(io.BytesIO(base64.b64decode(logo_data.split(",", 1)[1])))
+    except Exception:
+        return None
+
+
 def _receipt_design1(bill, raw_items, store, customer=None) -> bytes:
     """Design 1 — Sales Invoice: rounded border, red store name, blue header, colored item table."""
     from reportlab.pdfgen import canvas as rc
@@ -162,7 +211,7 @@ def _receipt_design1(bill, raw_items, store, customer=None) -> bytes:
     sname  = store.store_name if store else 'STORE'
     saddr  = (store.address or '') if store else ''
     upi_id = (store.upi_id or '').strip() if store else ''
-    tc_txt = (store.notes or 'NO RETURN, ONLY EXCHANGE WITHIN 7 DAYS WITH BILL.') if store else 'NO RETURN, ONLY EXCHANGE WITHIN 7 DAYS WITH BILL.'
+    tc_txt = store.policy   # the store's return / exchange policy (Settings → Receipt)
     addr_l = max(1, -(-len(saddr) // 38))
     tc_l   = max(2, -(-len(tc_txt) // 40))
     qr_h   = 30 if upi_id else 0
@@ -209,7 +258,7 @@ def _receipt_design1(bill, raw_items, store, customer=None) -> bytes:
 
     c.setFillColorRGB(0.85, 0, 0); c.setFont('Courier-Bold', 8)
     c.drawString(pad, y, 'Customer Details :'); y -= 4 * mm
-    for lbl, val in [('Name :', bill.customer_name or 'Cash'), ('Address :', 'Local'), ('Contact :', bill.phone or '-')]:
+    for lbl, val in [('Name :', bill.customer_name or 'Cash'), ('Contact :', bill.phone or '-')]:
         c.setFillColorRGB(0.85, 0, 0); c.setFont('Courier-Bold', 8); c.drawString(pad, y, lbl)
         c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 8); c.drawString(pad + 17 * mm, y, str(val)[:24]); y -= 4 * mm
     y -= 1 * mm
@@ -271,7 +320,7 @@ def _receipt_design1(bill, raw_items, store, customer=None) -> bytes:
         pass
 
     c.setFillColorRGB(0, 0, 0.7); c.setFont('Courier-BoldOblique', 8)
-    c.drawCentredString(W / 2, y, 'Thank You... Visit Again !'); y -= 6 * mm
+    c.drawCentredString(W / 2, y, store.footer[:46]); y -= 6 * mm
 
     if upi_id:
         try:
@@ -289,7 +338,7 @@ def _receipt_design1(bill, raw_items, store, customer=None) -> bytes:
     balance_pts  = int(customer.loyalty_pts or 0) if customer is not None else 0
     c.setStrokeColorRGB(0, 0, 0); c.setLineWidth(0.5)
     col_w = W / 2 - pad
-    for lbl, val in [('Bill Points', f'{earned_pts}'), ('Used Point', f'{redeemed_pts}'),
+    for lbl, val in [] if not (store.show_points and (earned_pts or redeemed_pts)) else [('Bill Points', f'{earned_pts}'), ('Used Point', f'{redeemed_pts}'),
                      ('Used Amt', f'{redeemed_pts}'), ('Balance Points', f'{balance_pts}')]:
         c.rect(pad, y - 4 * mm, col_w, 4 * mm)
         c.rect(pad + col_w, y - 4 * mm, W - pad * 2 - col_w, 4 * mm)
@@ -313,7 +362,7 @@ def _receipt_design2(bill, raw_items, store, customer=None) -> bytes:
     saddr  = (store.address or '') if store else ''
     phone  = (store.phone or '') if store else ''
     addr_l = max(1, -(-len(saddr) // 38))
-    H = (70 + addr_l * 5 + n * 18 + 72) * mm
+    H = (70 + addr_l * 5 + n * 18 + 84) * mm
 
     buf = io.BytesIO()
     c = rc.Canvas(buf, pagesize=(W, H))
@@ -336,7 +385,7 @@ def _receipt_design2(bill, raw_items, store, customer=None) -> bytes:
     c.setFont('Courier', 8)
     for i in range(0, len(saddr), 38):
         c.drawCentredString(W / 2, y, saddr[i:i + 38]); y -= 4 * mm
-    c.drawCentredString(W / 2, y, 'Bihar'); y -= 5 * mm
+    y -= 1 * mm
 
     # Contact rounded gray box
     c.setFillColorRGB(0.85, 0.85, 0.85); c.setStrokeColorRGB(0.6, 0.6, 0.6)
@@ -345,7 +394,8 @@ def _receipt_design2(bill, raw_items, store, customer=None) -> bytes:
     c.drawCentredString(W / 2, y - 3.5 * mm, f'Contact : {phone}'); y -= 9 * mm
 
     # Dashed-border customer block
-    box_h = 24 * mm
+    box_h = 21 * mm
+    box_top = y
     c.setFillColorRGB(0.96, 0.96, 0.96); c.setStrokeColorRGB(0.5, 0.5, 0.5)
     c.setDash(3, 2); c.rect(pad, y - box_h, W - pad * 2, box_h, fill=1, stroke=1); c.setDash()
     y -= 3 * mm
@@ -355,10 +405,10 @@ def _receipt_design2(bill, raw_items, store, customer=None) -> bytes:
     c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 8); c.drawString(W / 2 + 13 * mm, y, bill.bill_date); y -= 4 * mm
     c.setFillColorRGB(0.8, 0, 0); c.setFont('Courier-Bold', 8); c.drawString(W / 2 + 2 * mm, y, 'Time :')
     c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 8); c.drawString(W / 2 + 13 * mm, y, bill.bill_time); y -= 4 * mm
-    for lbl, val in [('Customer Name :', bill.customer_name or 'Cash'), ('Address :', 'Local'), ('State :', 'Bihar')]:
+    for lbl, val in [('Customer Name :', bill.customer_name or 'Cash'), ('Phone :', bill.phone or '-')]:
         c.setFillColorRGB(0.8, 0, 0); c.setFont('Courier-Bold', 8); c.drawString(pad + 2 * mm, y, lbl)
         c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 8); c.drawString(pad + 30 * mm, y, str(val)); y -= 4 * mm
-    y -= 2 * mm
+    y = box_top - box_h - 4 * mm   # table starts below the box, whatever the rows inside
 
     # Items table header
     c.setFillColorRGB(0.15, 0.15, 0.15); c.setFont('Courier-Bold', 8)
@@ -403,10 +453,16 @@ def _receipt_design2(bill, raw_items, store, customer=None) -> bytes:
         c.drawString(pad, y, words[i:i + 40]); y -= 3.5 * mm
     y -= 2 * mm
 
-    paid = float(bill.amount_paid or grand); pending = round(paid - grand, 2)
-    for lbl, val, red in [('Paid Amount :', f'{paid:.2f}', False), ('Pending Amount :', f'{pending:.2f}', True),
-                           ('Tend Amount :', f'{paid:.2f}', False), ('Balance Amount :', '0.00', False),
-                           ('Cust. Credit Balance :', '0.00 Cr', False)]:
+    paid = float(bill.amount_paid if bill.amount_paid is not None else grand)
+    change = float(bill.change_amt or 0)
+    pay_rows = [('Paid Amount :', f'{paid:.2f}', False)]
+    if change > 0:
+        pay_rows.append(('Change Given :', f'{change:.2f}', False))
+    elif change < 0:
+        pay_rows.append(('Balance Due :', f'{-change:.2f}', True))
+    if customer is not None and getattr(customer, 'credit_balance', 0):
+        pay_rows.append(('Cust. Credit Balance :', f'{float(customer.credit_balance):.2f}', True))
+    for lbl, val, red in pay_rows:
         c.setFillColorRGB(*(0.8, 0, 0) if red else (0, 0, 0.65)); c.setFont('Courier-Bold', 7.5)
         c.drawString(pad, y, lbl)
         c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 7.5); c.drawRightString(W - pad, y, val); y -= 4 * mm
@@ -439,7 +495,9 @@ def _receipt_design2(bill, raw_items, store, customer=None) -> bytes:
             pass
 
     c.setFillColorRGB(0, 0, 0); c.setFont('Courier-BoldOblique', 8)
-    c.drawCentredString(W / 2, y, 'Thank You... Visit Again !')
+    c.drawCentredString(W / 2, y, store.footer[:46])
+    c.setFont('Courier', 6.5)
+    c.drawCentredString(W / 2, y - 3.5 * mm, store.policy[:60])
     c.save()
     return buf.getvalue()
 
@@ -456,7 +514,7 @@ def _receipt_design3(bill, raw_items, store, customer=None) -> bytes:
     saddr  = (store.address or '') if store else ''
     phone  = (store.phone or '') if store else ''
     gstin  = (store.gstin or '') if store else ''
-    tc_txt = (store.notes or 'NO RETURN, ONLY EXCHANGE WITHIN 7 DAYS WITH BILL.') if store else 'NO RETURN, ONLY EXCHANGE WITHIN 7 DAYS WITH BILL.'
+    tc_txt = store.policy   # the store's return / exchange policy (Settings → Receipt)
     tc_l   = max(2, -(-len(tc_txt) // 40))
     H = (70 + n * 13 + 65 + tc_l * 3.5 + 14) * mm
 
@@ -473,11 +531,16 @@ def _receipt_design3(bill, raw_items, store, customer=None) -> bytes:
     # Logo placeholder box (right)
     logo_w, logo_h = 19 * mm, 16 * mm
     lx = W - pad - logo_w
-    c.setStrokeColorRGB(0, 0, 0); c.setLineWidth(1)
-    c.rect(lx, y - logo_h, logo_w, logo_h)
-    c.setFillColorRGB(0, 0, 0); c.setFont('Courier-Bold', 9)
-    c.drawCentredString(lx + logo_w / 2, y - 7 * mm, 'LOGO')
-    c.drawCentredString(lx + logo_w / 2, y - 12 * mm, 'HERE')
+    logo = _logo_reader(store.logo_data)
+    if logo:
+        c.drawImage(logo, lx, y - logo_h, logo_w, logo_h, preserveAspectRatio=True, anchor='c', mask='auto')
+    else:
+        # No logo uploaded: show the store's initials rather than a "LOGO HERE" box
+        initials = ''.join(w[0] for w in sname.split()[:2]).upper() or 'S'
+        c.setStrokeColorRGB(0, 0, 0); c.setLineWidth(1)
+        c.rect(lx, y - logo_h, logo_w, logo_h)
+        c.setFillColorRGB(0, 0, 0); c.setFont('Helvetica-Bold', 18)
+        c.drawCentredString(lx + logo_w / 2, y - 10.5 * mm, initials)
     c.setLineWidth(0.5)
 
     # Store info (left)
@@ -545,7 +608,9 @@ def _receipt_design3(bill, raw_items, store, customer=None) -> bytes:
     c.roundRect(pad, py, W - pad * 2, py_h, 2 * mm, fill=1, stroke=1); y -= 2.5 * mm
     c.setFillColorRGB(0, 0, 0); c.setFont('Courier-Bold', 9)
     c.drawString(pad + 2 * mm, y, 'Paid Amount :'); c.drawRightString(W - pad - 1 * mm, y, f'{paid:.2f}'); y -= 4.5 * mm
-    c.drawString(pad + 2 * mm, y, 'Pending Amount :'); c.drawRightString(W - pad - 1 * mm, y, f'{-disc:.2f}')
+    _chg = float(bill.change_amt or 0)
+    c.drawString(pad + 2 * mm, y, 'Balance Due :' if _chg < 0 else 'Change :')
+    c.drawRightString(W - pad - 1 * mm, y, f'{abs(_chg):.2f}')
     y = py - 4 * mm
 
     if saved > 0:
@@ -582,7 +647,7 @@ def _receipt_design3(bill, raw_items, store, customer=None) -> bytes:
 
     c.setFillColorRGB(0, 0, 0); c.rect(0, y - 9 * mm, W, 9 * mm, fill=1, stroke=0)
     c.setFillColorRGB(1, 1, 1); c.setFont('Courier-BoldOblique', 9)
-    c.drawCentredString(W / 2, y - 6 * mm, 'Thank You... Visit Again !')
+    c.drawCentredString(W / 2, y - 6 * mm, store.footer[:46])
     c.save()
     return buf.getvalue()
 
@@ -599,10 +664,10 @@ def _receipt_design4(bill, raw_items, store, customer=None) -> bytes:
     saddr  = (store.address or '') if store else ''
     phone  = (store.phone or '') if store else ''
     gstin  = (store.gstin or '') if store else ''
-    tc_txt = (store.notes or 'NO RETURN, ONLY EXCHANGE WITHIN 7 DAYS WITH BILL.') if store else 'NO RETURN, ONLY EXCHANGE WITHIN 7 DAYS WITH BILL.'
+    tc_txt = store.policy   # the store's return / exchange policy (Settings → Receipt)
     tc_l   = max(2, -(-len(tc_txt) // 40))
     addr_l = max(1, -(-len(saddr) // 38))
-    H = (58 + addr_l * 4 + n * 12 + 60 + tc_l * 3.5) * mm
+    H = (58 + addr_l * 4 + n * 12 + 68 + tc_l * 3.5) * mm
 
     buf = io.BytesIO()
     c = rc.Canvas(buf, pagesize=(W, H))
@@ -637,7 +702,7 @@ def _receipt_design4(bill, raw_items, store, customer=None) -> bytes:
     c.setFillColorRGB(0.8, 0, 0); c.setFont('Courier-Bold', 8); c.drawString(W / 2 + 2 * mm, y, 'Date :')
     c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 8); c.drawString(W / 2 + 13 * mm, y, bill.bill_date); y -= 5 * mm
 
-    for lbl, val in [('Customer Na', bill.customer_name or 'Cash'), ('Address :', 'Local'), ('Contact :', bill.phone or '-')]:
+    for lbl, val in [('Customer :', bill.customer_name or 'Cash'), ('Contact :', bill.phone or '-')]:
         c.setFillColorRGB(0, 0, 0); c.setFont('Courier', 8)
         c.drawString(pad, y, f'{lbl}  {val}'); y -= 4 * mm
     y -= 1 * mm; dline(3)
@@ -702,13 +767,20 @@ def _receipt_design4(bill, raw_items, store, customer=None) -> bytes:
     c.setFont('Courier-Bold', 7)
     for i in range(0, len(tc_txt), 40):
         c.drawString(pad, y, tc_txt[i:i + 40]); y -= 3.5 * mm
+    c.setFont('Courier-BoldOblique', 8)
+    c.drawCentredString(W / 2, y - 2 * mm, store.footer[:46])
 
     c.save()
     return buf.getvalue()
 
 
-def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch", customer=None) -> bytes:
-    """Generate receipt PDF bytes. Routes to design templates or thermal formats."""
+def _generate_receipt_pdf(bill, raw_items, store, paper_size: Optional[str] = None, customer=None,
+                          overrides: Optional[dict] = None) -> bytes:
+    """Generate receipt PDF bytes. Routes to design templates or thermal formats.
+    paper_size None → the store's saved receipt design."""
+    paper_size = paper_size or (overrides or {}).get("receipt_design") or getattr(store, "receipt_design", None) or "3inch"
+    store = _receipt_view(store, overrides)
+    bill = _bill_view(bill, store.show_points)
     if paper_size == "design1":
         return _receipt_design1(bill, raw_items, store, customer)
     if paper_size == "design2":
@@ -855,8 +927,8 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch", cus
             for lbl, val in loyalty_rows:
                 rw(lbl, val, sz=10)
         thick_line()
-        ctr("** THANK YOU! VISIT AGAIN **", "Courier-Bold", 11)
-        ctr("Exchange within 7 days with receipt", "Courier", 8)
+        ctr(store.footer, "Courier-Bold", 11)
+        ctr(store.policy, "Courier", 8)
     else:
         dash()
         rw("Subtotal", f"Rs.{bill.subtotal:.2f}")
@@ -879,8 +951,8 @@ def _generate_receipt_pdf(bill, raw_items, store, paper_size: str = "3inch", cus
             for lbl, val in loyalty_rows:
                 rw(lbl, val)
         dash()
-        ctr("* Thank You! Visit Again *", "Courier-Bold", 8)
-        ctr("Exchange within 7 days with receipt", "Courier", 6)
+        ctr(store.footer, "Courier-Bold", 8)
+        ctr(store.policy, "Courier", 6)
 
     if has_qr:
         try:
@@ -1273,7 +1345,7 @@ def bills_summary(
 @router.get("/public/{share_token}")
 def get_public_receipt(
     share_token: str,
-    paper: str = "3inch",
+    paper: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     bill = db.query(Bill).filter(Bill.share_token == share_token).first()
@@ -1371,7 +1443,7 @@ def get_bill(
 @router.get("/{bill_no}/receipt-pdf")
 def get_receipt_pdf(
     bill_no: str,
-    paper: str = "3inch",
+    paper: Optional[str] = None,
     identity: dict = Depends(require_store_access),
     db: Session = Depends(get_db),
 ):
@@ -1627,6 +1699,39 @@ def void_bill(
     bill.voided_at   = datetime.datetime.now(datetime.timezone.utc)
     db.commit()
     return MessageResponse(message=f"Bill {bill_no} has been cancelled.")
+
+
+@router.post("/receipt-preview")
+def receipt_preview(
+    payload: ReceiptPreviewRequest,
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    """A sample bill rendered with the settings being edited (nothing is saved)."""
+    from types import SimpleNamespace as NS
+    store = db.query(Store).filter(Store.store_code == identity["store_code"]).first()
+    # Same column order as the bill_items table: receipts read rows by name and by position
+    from collections import namedtuple
+    Row = namedtuple("Row", "id bill_id store_code item_id product_name category size color qty mrp "
+                            "selling_price discount_pct subtotal gst_pct gst_amt total")
+    items = [
+        Row(1, 0, identity["store_code"], "ITM001", "Cotton Kurta", "Kurtis", "M", "Blue", 2, 899, 799, 11.1, 1598, 5, 79.9, 1677.9),
+        Row(2, 0, identity["store_code"], "ITM003", "Slim Jeans", "Jeans", "32", "Black", 1, 1499, 1499, 0, 1499, 5, 74.95, 1573.95),
+        Row(3, 0, identity["store_code"], "ITM008", "Leather Belt", "Accessories", "Free Size", "Brown", 1, 399, 399, 0, 399, 12, 47.88, 446.88),
+    ]
+    now = datetime.datetime.now()
+    bill = NS(
+        id=0, store_code=identity["store_code"], bill_no="BILL0001", bill_date=now.strftime("%Y-%m-%d"),
+        bill_time=now.strftime("%I:%M %p"), customer_id="CUST001", customer_name="Priya Sharma", phone="9876543210",
+        subtotal=3496.0, discount=100.0, discount_type="Rs.", gst_total=197.0, grand_total=3593.0,
+        amount_paid=3600.0, change_amt=7.0, payment_mode="Cash", cashier=identity["username"], status="Paid",
+        notes="", share_token=None, loyalty_earned_pts=34, loyalty_redeemed_pts=0, store_credit_used=0,
+        created_at=now,
+    )
+    pdf = _generate_receipt_pdf(bill, items, store, customer=NS(loyalty_pts=120),
+                                overrides=payload.model_dump())
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": 'inline; filename="receipt-preview.pdf"'})
 
 
 @router.post("/{bill_no}/link-customer", response_model=MessageResponse)
