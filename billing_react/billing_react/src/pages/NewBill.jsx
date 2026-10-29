@@ -23,6 +23,7 @@ import { useCurrency } from '../utils/currency'
 import { printPdfWithAuth, openPdfWithAuth } from '../utils/pdf'
 import GPayButton from '../components/GPayButton'
 import CameraScanner from '../components/CameraScanner'
+import { normalizeIndianMobile, whatsappNumber, indianMobileRule } from '../utils/phone'
 
 const { Title, Text } = Typography
 const { useBreakpoint } = Grid
@@ -44,14 +45,6 @@ const CATEGORIES    = ['Shirts','T-Shirts','Jeans','Trousers','Kurtis','Sarees',
 const GST_RATES     = [0, 5, 12, 18, 28]
 const QUICK_DISCOUNTS = [['%', 5], ['%', 10], ['Rs.', 50], ['Rs.', 100]]
 const CASH_NOTES = [500, 1000, 2000]
-
-// Indian mobile: 10 digits starting 6–9 (accepts +91 / 0 prefixes)
-function normalizeIndianMobile(v) {
-  let d = String(v || '').replace(/\D/g, '')
-  if (d.length === 12 && d.startsWith('91')) d = d.slice(2)
-  if (d.length === 11 && d.startsWith('0')) d = d.slice(1)
-  return /^[6-9]\d{9}$/.test(d) ? d : null
-}
 
 function readStore(key, fallback) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback } catch { return fallback }
@@ -586,8 +579,7 @@ export default function NewBill() {
   function whatsappLast() {
     const receiptUrl = lastBill.share_token ? getPublicReceiptUrl(lastBill.share_token) : null
     const msg = buildWhatsAppMsg(lastBill, storeName, storeProfile, receiptUrl, sym)
-    const phone = normalizeIndianMobile(lastBill.phone) ? '91' + normalizeIndianMobile(lastBill.phone) : (lastBill.phone || '').replace(/\D/g, '')
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
+    window.open(`https://wa.me/${whatsappNumber(lastBill.phone)}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
   // ── Add Customer Modal ─────────────────────────────────────────────────────
@@ -1135,7 +1127,7 @@ export default function NewBill() {
           </Form.Item>
           <Form.Item name="phone" label="Mobile number" rules={[
             { required: true, message: 'Enter the mobile number' },
-            ...(india ? [{ validator: (_, v) => !v || normalizeIndianMobile(v) ? Promise.resolve() : Promise.reject(new Error('Enter a 10-digit mobile number (starts with 6–9)')) }] : []),
+            ...(india ? [indianMobileRule] : []),
           ]}>
             <Input type="tel" inputMode="numeric" prefix={india ? '+91' : undefined} maxLength={india ? 16 : 20} placeholder={india ? '98765 43210' : ''} />
           </Form.Item>

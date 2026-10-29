@@ -1,69 +1,85 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Card, Table, Input, Select, Button, Space, Tag, Typography,
-  Modal, Descriptions, Divider, message, InputNumber, Form, Alert, AutoComplete, Spin, Grid,
+  Card, Table, Input, Select, Button, Tag, Typography, DatePicker, Tooltip,
+  Modal, Divider, message, InputNumber, Alert, AutoComplete, Spin, Grid, Radio,
 } from 'antd'
-import { SearchOutlined, PrinterOutlined, RollbackOutlined, FileTextOutlined } from '@ant-design/icons'
+import {
+  SearchOutlined, PrinterOutlined, RollbackOutlined, EyeOutlined, FileSearchOutlined, RightOutlined,
+} from '@ant-design/icons'
+import dayjs from 'dayjs'
 import { getBills, getBill, returnBillItems, getCustomers } from '../api/client'
 import { printPdfWithAuth } from '../utils/pdf'
 import { useCurrency } from '../utils/currency'
+import { useAuthStore } from '../store/authStore'
 
 const { Title, Text } = Typography
 const { useBreakpoint } = Grid
-const PAYMENT_MODES = ['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Net Banking']
+const { RangePicker } = DatePicker
 
+const TEXT    = '#3A3530'
+const SUB     = '#5F5853'
+const PRIMARY = '#2F6690'
+const GOOD    = '#1E8449'
+const BAD     = '#C0392B'
+
+const PAYMENT_MODES = ['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Credit']
 const STATUS_COLORS = {
   Paid: 'green', Credit: 'orange', Void: 'red',
   Returned: 'purple', 'Partial Return': 'geekblue',
 }
+const ISO = 'YYYY-MM-DD'
+const PAGE_LIMIT = 100   // backend default page size
+
+const CSS = `
+.bh-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.bh-stat { background: var(--bg); border-radius: 14px; box-shadow: var(--neu-sm); padding: 12px 16px; }
+.bh-filters { display: grid; grid-template-columns: 1.3fr 1fr 0.8fr auto; gap: 10px; align-items: center; }
+.bh-card { background: var(--bg); border-radius: 14px; box-shadow: var(--neu-sm); padding: 14px; cursor: pointer; }
+.bh-card:active { box-shadow: var(--neu-inset); }
+.bh-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0; font-size: 13.5px; color: ${SUB}; }
+.bh-row b { color: ${TEXT}; }
+.bh-table .ant-table-row { cursor: pointer; }
+@media (max-width: 991px) { .bh-filters { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 767px) {
+  .bh-strip { gap: 8px; }
+  .bh-stat { padding: 10px 12px; }
+  .bh-filters { grid-template-columns: 1fr; }
+}
+`
+
+function paramsFor(f) {
+  const p = {}
+  if (f.from) p.date_from = f.from
+  if (f.to) p.date_to = f.to
+  if (f.customer) p.customer = f.customer
+  if (f.payment_mode) p.payment_mode = f.payment_mode
+  if (f.category != null) p.category = f.category
+  return p
+}
 
 export default function BillHistory() {
-  const [bills, setBills] = useState([])
-  const [loading, setLoading] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
-  const [filters, setFilters] = useState({
-    date: searchParams.get('date') || '',
-    customer: searchParams.get('customer') || '',
-    payment_mode: searchParams.get('payment_mode') || '',
+  const [filters, setFilters] = useState(() => {
+    const day = searchParams.get('date')
+    return {
+      from: searchParams.get('from') || day || '',
+      to: searchParams.get('to') || day || '',
+      customer: searchParams.get('customer') || '',
+      payment_mode: searchParams.get('payment_mode') || '',
+      category: searchParams.get('category'),
+      categoryLabel: searchParams.get('category_label') || searchParams.get('category'),
+    }
   })
-  // Filters that arrive from dashboard links (date range / category)
-  const [linked, setLinked] = useState(() => {
-    const from = searchParams.get('from'), to = searchParams.get('to')
-    const category = searchParams.get('category')
-    return from || to || category !== null
-      ? { from, to, category, categoryLabel: searchParams.get('category_label') || category }
-      : null
-  })
+  const [bills, setBills]     = useState([])
+  const [loading, setLoading] = useState(true)
   const screens  = useBreakpoint()
   const isMobile = !screens.md
   const { sym } = useCurrency()
+  const india = (useAuthStore((s) => s.country) || 'India') === 'India'
   const [custOptions, setCustOptions] = useState([])
   const [custLoading, setCustLoading] = useState(false)
   const custDebounceRef = useRef(null)
-
-  function onCustInput(val) {
-    setFilters(f => ({ ...f, customer: val }))
-    if (custDebounceRef.current) clearTimeout(custDebounceRef.current)
-    if (!val.trim()) { setCustOptions([]); return }
-    custDebounceRef.current = setTimeout(async () => {
-      setCustLoading(true)
-      try {
-        const res = await getCustomers({ search: val.trim() })
-        setCustOptions((res || []).map(c => ({
-          key: c.customer_id,
-          value: c.name,
-          label: (
-            <span>
-              <Text strong>{c.name}</Text>
-              {c.phone && <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>{c.phone}</Text>}
-            </span>
-          ),
-        })))
-      } catch { }
-      finally { setCustLoading(false) }
-    }, 300)
-  }
 
   // detail modal
   const [detailBill, setDetailBill] = useState(null)
@@ -76,18 +92,10 @@ export default function BillHistory() {
   const [returnNotes, setReturnNotes] = useState('')
   const [returnLoading, setReturnLoading] = useState(false)
 
-  async function load(link = linked) {
+  async function load(next = filters) {
     setLoading(true)
     try {
-      const params = {}
-      if (filters.date) params.date = filters.date
-      if (filters.customer) params.customer = filters.customer
-      if (filters.payment_mode) params.payment_mode = filters.payment_mode
-      if (link?.from) params.date_from = link.from
-      if (link?.to) params.date_to = link.to
-      if (link?.category != null) params.category = link.category
-      const res = await getBills(params)
-      setBills(res || [])
+      setBills((await getBills(paramsFor(next))) || [])
     } catch {
       setBills([])
     } finally {
@@ -95,26 +103,57 @@ export default function BillHistory() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  // Apply a filter change straight away
+  function applyFilters(patch) {
+    const next = { ...filters, ...patch }
+    setFilters(next)
+    load(next)
+  }
 
-  // ?bill=BILL0042 (New Bill → Return / Exchange): open that bill straight away
   useEffect(() => {
+    getBills(paramsFor(filters))
+      .then((res) => setBills(res || []))
+      .catch(() => setBills([]))
+      .finally(() => setLoading(false))
+    // ?bill=BILL0042 (New Bill → Return / Exchange): open that bill straight away
     const billNo = searchParams.get('bill')
     if (billNo) viewDetail(billNo.trim().toUpperCase())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function clearLinked() {
-    setLinked(null)
-    setSearchParams({}, { replace: true })
-    load(null)
+  function onCustInput(val) {
+    setFilters((f) => ({ ...f, customer: val }))
+    if (custDebounceRef.current) clearTimeout(custDebounceRef.current)
+    if (!val.trim()) { setCustOptions([]); applyFilters({ customer: '' }); return }
+    custDebounceRef.current = setTimeout(async () => {
+      setCustLoading(true)
+      try {
+        const res = await getCustomers({ search: val.trim() })
+        setCustOptions((res || []).map((c) => ({
+          key: c.customer_id,
+          value: c.name,
+          label: (
+            <span>
+              <Text strong>{c.name}</Text>
+              {c.phone && <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>{c.phone}</Text>}
+            </span>
+          ),
+        })))
+      } catch { setCustOptions([]) }
+      finally { setCustLoading(false) }
+    }, 300)
   }
 
-  const fmtDay = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-  const linkedLabel = linked && [
-    linked.categoryLabel && `Category: ${linked.categoryLabel}`,
-    linked.from && linked.to && (linked.from === linked.to ? fmtDay(linked.from) : `${fmtDay(linked.from)} – ${fmtDay(linked.to)}`),
-  ].filter(Boolean).join(' · ')
+  function clearCategory() {
+    setSearchParams({}, { replace: true })
+    applyFilters({ category: null, categoryLabel: null })
+  }
+
+  function resetFilters() {
+    setSearchParams({}, { replace: true })
+    setCustOptions([])
+    applyFilters({ from: '', to: '', customer: '', payment_mode: '', category: null, categoryLabel: null })
+  }
 
   async function viewDetail(billNo) {
     try {
@@ -122,6 +161,13 @@ export default function BillHistory() {
       setDetailBill(res)
       setModalOpen(true)
     } catch (err) { message.error(`Bill ${billNo}: ${err.message}`) }
+  }
+
+  async function printBill(billNo) {
+    try {
+      const paper = localStorage.getItem('receipt_paper_size') || '3inch'
+      await printPdfWithAuth(`/bills/${billNo}/receipt-pdf?paper=${paper}`)
+    } catch (err) { message.error('PDF failed: ' + err.message) }
   }
 
   function openReturnModal() {
@@ -189,286 +235,259 @@ export default function BillHistory() {
   }
 
   const canReturn = detailBill && !['Void', 'Returned'].includes(detailBill.status)
+  const money = (v) => `${sym}${Math.round(Number(v) || 0).toLocaleString('en-IN')}`
+  const fmtDate = (d) => (d ? dayjs(d).format('D MMM YYYY') : '—')
+
+  const totalValue = bills.reduce((s, b) => s + (b.grand_total || 0), 0)
+  const totalDue   = bills.reduce((s, b) => s + (b.change_amt < 0 ? -b.change_amt : 0), 0)
+  const hasFilters = filters.from || filters.to || filters.customer || filters.payment_mode || filters.category != null
+
+  const statusTag = (status) => <Tag color={STATUS_COLORS[status] || 'default'} style={{ margin: 0 }}>{status}</Tag>
 
   const columns = [
     {
-      title: 'Bill No', dataIndex: 'bill_no', key: 'bill_no',
-      render: (v) => <Button type="link" size="small" onClick={() => viewDetail(v)}>{v}</Button>,
+      title: 'Bill', dataIndex: 'bill_no', key: 'bill_no', width: 120,
+      render: (v) => <b style={{ color: PRIMARY }}>{v}</b>,
     },
-    { title: 'Date', dataIndex: 'bill_date', key: 'bill_date' },
-    { title: 'Customer', dataIndex: 'customer_name', key: 'customer_name' },
+    { title: 'Date', dataIndex: 'bill_date', key: 'bill_date', width: 120, render: fmtDate },
     {
-      title: 'Total', dataIndex: 'grand_total', key: 'grand_total',
-      render: (v) => <Text strong>{sym}{Math.round(v).toLocaleString()}</Text>,
+      title: 'Customer', dataIndex: 'customer_name', key: 'customer_name', ellipsis: true,
+      render: (v) => <span style={{ color: TEXT, fontWeight: 500 }}>{v || 'Walk-in'}</span>,
     },
+    { title: 'Payment', dataIndex: 'payment_mode', key: 'payment_mode', width: 130, render: (v) => <Tag style={{ margin: 0 }}>{v}</Tag> },
+    { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: statusTag },
     {
-      title: 'Payment', dataIndex: 'payment_mode', key: 'payment_mode',
-      render: (v) => <Tag color="blue">{v}</Tag>,
-    },
-    {
-      title: 'Status', dataIndex: 'status', key: 'status',
-      render: (v) => <Tag color={STATUS_COLORS[v] || 'default'}>{v}</Tag>,
+      title: 'Total', dataIndex: 'grand_total', key: 'grand_total', width: 110, align: 'right',
+      render: (v) => <b style={{ color: TEXT }}>{money(v)}</b>,
+      sorter: (a, b) => a.grand_total - b.grand_total,
     },
     {
-      title: 'Paid', dataIndex: 'amount_paid', key: 'amount_paid', width: 100,
-      render: (v) => <Text strong style={{ color: '#389e0d' }}>{sym}{Math.round(v).toLocaleString()}</Text>,
+      title: 'Due', dataIndex: 'change_amt', key: 'change_amt', width: 100, align: 'right',
+      render: (v) => (v < 0 ? <b style={{ color: BAD }}>{money(-v)}</b> : <span style={{ color: SUB }}>—</span>),
     },
     {
-      title: 'Balance Due', dataIndex: 'change_amt', key: 'change_amt', width: 110,
-      render: (v) => v < 0
-        ? <Tag color="red">{sym}{Math.abs(Math.round(v)).toLocaleString()}</Tag>
-        : <Tag color="green">Paid</Tag>,
-    },
-    {
-      title: '', key: 'action',
+      title: '', key: 'action', width: 96, align: 'right',
       render: (_, rec) => (
-        <Button
-          size="small" icon={<PrinterOutlined />}
-          onClick={async () => {
-            try {
-              const paper = localStorage.getItem('receipt_paper_size') || '3inch'
-              await printPdfWithAuth(`/bills/${rec.bill_no}/receipt-pdf?paper=${paper}`)
-            }
-            catch (err) { message.error('PDF failed: ' + err.message) }
-          }}
-        >PDF</Button>
+        <span style={{ display: 'inline-flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+          <Tooltip title="View bill"><Button size="small" icon={<EyeOutlined />} onClick={() => viewDetail(rec.bill_no)} aria-label={`View ${rec.bill_no}`} /></Tooltip>
+          <Tooltip title="Print receipt"><Button size="small" icon={<PrinterOutlined />} onClick={() => printBill(rec.bill_no)} aria-label={`Print ${rec.bill_no}`} /></Tooltip>
+        </span>
       ),
     },
   ]
 
+  const empty = (
+    <div style={{ textAlign: 'center', padding: '40px 12px', color: SUB }}>
+      <FileSearchOutlined style={{ fontSize: 34, color: PRIMARY, opacity: 0.6 }} />
+      <div style={{ marginTop: 8, fontSize: 14 }}>No bills match these filters</div>
+      {hasFilters && <Button type="link" onClick={resetFilters} style={{ color: PRIMARY }}>Clear filters</Button>}
+    </div>
+  )
+
+  const d = detailBill
+  const gst = d?.gst_total || 0
+
   return (
     <div>
-      <Title level={isMobile ? 4 : 3} style={{ marginBottom: 12 }}>📋 Bill History</Title>
+      <style>{CSS}</style>
+      <Title level={isMobile ? 4 : 3} style={{ margin: '0 0 12px', color: TEXT }}>Bill history</Title>
 
       {/* Filters */}
-      <Card style={{ borderRadius: 12, marginBottom: 12 }}>
-        {isMobile ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <Input
-              placeholder="Date (YYYY-MM-DD)"
-              value={filters.date}
-              onChange={(e) => setFilters({ ...filters, date: e.target.value })}
-              prefix={<SearchOutlined />}
-            />
-            <AutoComplete
-              value={filters.customer}
-              options={custOptions}
-              onSearch={onCustInput}
-              onChange={onCustInput}
-              onSelect={(val) => { setFilters(f => ({ ...f, customer: val })); setCustOptions([]) }}
-              allowClear
-              onClear={() => { setFilters(f => ({ ...f, customer: '' })); setCustOptions([]) }}
-              notFoundContent={custLoading ? <Spin size="small" /> : null}
-              placeholder="Search customer..."
-            >
-              <Input prefix={<SearchOutlined />} suffix={custLoading ? <Spin size="small" /> : null} />
-            </AutoComplete>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Select
-                placeholder="Payment" value={filters.payment_mode || undefined}
-                onChange={(v) => setFilters({ ...filters, payment_mode: v })}
-                allowClear style={{ flex: 1 }}
-              >
-                {PAYMENT_MODES.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
-              </Select>
-              <Button type="primary" onClick={() => load()} icon={<SearchOutlined />}>Search</Button>
-            </div>
-          </div>
-        ) : (
-          <Space wrap>
-            <Input
-              placeholder="Filter by date (YYYY-MM-DD)"
-              value={filters.date}
-              onChange={(e) => setFilters({ ...filters, date: e.target.value })}
-              prefix={<SearchOutlined />} style={{ width: 200 }}
-            />
-            <AutoComplete
-              style={{ width: 200 }}
-              value={filters.customer}
-              options={custOptions}
-              onSearch={onCustInput}
-              onChange={onCustInput}
-              onSelect={(val) => { setFilters(f => ({ ...f, customer: val })); setCustOptions([]) }}
-              allowClear
-              onClear={() => { setFilters(f => ({ ...f, customer: '' })); setCustOptions([]) }}
-              notFoundContent={custLoading ? <Spin size="small" /> : null}
-              placeholder="Search customer..."
-            >
-              <Input prefix={<SearchOutlined />} suffix={custLoading ? <Spin size="small" /> : null} />
-            </AutoComplete>
-            <Select
-              placeholder="Payment Mode" value={filters.payment_mode || undefined}
-              onChange={(v) => setFilters({ ...filters, payment_mode: v })}
-              allowClear style={{ width: 160 }}
-            >
-              {PAYMENT_MODES.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
-            </Select>
-            <Button type="primary" onClick={() => load()} icon={<SearchOutlined />}>Search</Button>
-          </Space>
+      <Card style={{ borderRadius: 14, marginBottom: 14 }} styles={{ body: { padding: isMobile ? 12 : 16 } }}>
+        <div className="bh-filters">
+          <RangePicker
+            value={filters.from && filters.to ? [dayjs(filters.from), dayjs(filters.to)] : null}
+            onChange={(v) => applyFilters(v ? { from: v[0].format(ISO), to: v[1].format(ISO) } : { from: '', to: '' })}
+            format="D MMM YYYY"
+            placeholder={['From date', 'To date']}
+            disabledDate={(day) => day.isAfter(dayjs(), 'day')}
+            presets={[
+              { label: 'Today', value: [dayjs(), dayjs()] },
+              { label: 'Yesterday', value: [dayjs().subtract(1, 'day'), dayjs().subtract(1, 'day')] },
+              { label: 'Last 7 days', value: [dayjs().subtract(6, 'day'), dayjs()] },
+              { label: 'This month', value: [dayjs().startOf('month'), dayjs()] },
+              { label: 'Last month', value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')] },
+            ]}
+            inputReadOnly={isMobile}
+            style={{ width: '100%' }}
+          />
+          <AutoComplete
+            value={filters.customer}
+            options={custOptions}
+            onSearch={onCustInput}
+            onChange={onCustInput}
+            onSelect={(val) => { setCustOptions([]); applyFilters({ customer: val }) }}
+            allowClear
+            onClear={() => { setCustOptions([]); applyFilters({ customer: '' }) }}
+            notFoundContent={custLoading ? <Spin size="small" /> : null}
+            style={{ width: '100%' }}
+          >
+            <Input placeholder="Customer name" prefix={<SearchOutlined />}
+              onPressEnter={() => load()} suffix={custLoading ? <Spin size="small" /> : null} />
+          </AutoComplete>
+          <Select
+            placeholder="All payment modes" value={filters.payment_mode || undefined}
+            onChange={(v) => applyFilters({ payment_mode: v || '' })}
+            allowClear style={{ width: '100%' }}
+            options={PAYMENT_MODES.map((m) => ({ value: m, label: m === 'Credit' ? 'Credit (pay later)' : m }))}
+          />
+          {hasFilters
+            ? <Button type="link" onClick={resetFilters} style={{ color: PRIMARY, padding: 0 }}>Clear filters</Button>
+            : <span />}
+        </div>
+        {filters.category != null && (
+          <Tag closable onClose={clearCategory} color="blue" style={{ marginTop: 10, fontSize: 13, padding: '3px 10px' }}>
+            Category: {filters.categoryLabel}
+          </Tag>
         )}
       </Card>
 
-      {linked && (
-        <Tag closable onClose={clearLinked} color="blue" style={{ marginBottom: 10, fontSize: 13, padding: '4px 10px' }}>
-          Showing: {linkedLabel}
-        </Tag>
+      {/* Summary */}
+      <div className="bh-strip">
+        <div className="bh-stat">
+          <div style={{ fontSize: 12.5, color: SUB, fontWeight: 600 }}>Bills</div>
+          <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: TEXT }}>{loading ? '…' : bills.length}</div>
+        </div>
+        <div className="bh-stat">
+          <div style={{ fontSize: 12.5, color: SUB, fontWeight: 600 }}>Total value</div>
+          <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: TEXT }}>{loading ? '…' : money(totalValue)}</div>
+        </div>
+        <div className="bh-stat">
+          <div style={{ fontSize: 12.5, color: SUB, fontWeight: 600 }}>Balance due</div>
+          <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: totalDue > 0 ? BAD : TEXT }}>{loading ? '…' : money(totalDue)}</div>
+        </div>
+      </div>
+      {!loading && bills.length >= PAGE_LIMIT && (
+        <Alert type="info" showIcon style={{ marginBottom: 12 }}
+          message={`Showing the latest ${PAGE_LIMIT} bills. Pick a date range to see older ones.`} />
       )}
-      <Text type="secondary" style={{ marginBottom: 10, display: 'block', fontSize: 12 }}>
-        {bills.length} record(s) found
-      </Text>
 
       {/* Mobile: card list | Desktop: table */}
       {isMobile ? (
         loading ? (
           <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
-        ) : bills.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 48, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
-            No bills found
-          </div>
-        ) : (
+        ) : bills.length === 0 ? empty : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {bills.map((bill) => (
-              <div
-                key={bill.bill_no}
+              <div key={bill.bill_no} className="bh-card" role="button" tabIndex={0}
                 onClick={() => viewDetail(bill.bill_no)}
-                style={{
-                  background: 'rgba(18,10,3,0.6)',
-                  backdropFilter: 'blur(14px)',
-                  border: '1px solid rgba(201,168,76,0.18)',
-                  borderRadius: 14,
-                  padding: '14px 16px',
-                  cursor: 'pointer',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-              >
-                {/* Row 1: Bill no + status */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontWeight: 700, color: '#C9A84C', fontSize: 14 }}>#{bill.bill_no}</span>
-                  <Tag color={STATUS_COLORS[bill.status] || 'default'} style={{ margin: 0 }}>{bill.status}</Tag>
-                </div>
-                {/* Row 2: Customer + date */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
-                    {bill.customer_name}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{bill.bill_date}</span>
-                </div>
-                {/* Row 3: Amount + payment + PDF */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>
-                      {sym}{Math.round(bill.grand_total).toLocaleString()}
-                    </span>
-                    <Tag color="blue" style={{ marginLeft: 8, fontSize: 11 }}>{bill.payment_mode}</Tag>
+                onKeyDown={(e) => { if (e.key === 'Enter') viewDetail(bill.bill_no) }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, color: TEXT, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {bill.customer_name || 'Walk-in'}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: SUB }}>{bill.bill_no} · {fmtDate(bill.bill_date)}</div>
                   </div>
-                  <Button
-                    size="small" icon={<PrinterOutlined />}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      const paper = localStorage.getItem('receipt_paper_size') || '3inch'
-                      printPdfWithAuth(`/bills/${bill.bill_no}/receipt-pdf?paper=${paper}`)
-                        .catch(err => message.error('PDF failed: ' + err.message))
-                    }}
-                  >PDF</Button>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 800, fontSize: 17, color: TEXT }}>{money(bill.grand_total)}</div>
+                    {bill.change_amt < 0 && <div style={{ fontSize: 12, color: BAD, fontWeight: 700 }}>Due {money(-bill.change_amt)}</div>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
+                  <Tag style={{ margin: 0 }}>{bill.payment_mode}</Tag>
+                  {statusTag(bill.status)}
+                  <Button size="small" icon={<PrinterOutlined />} style={{ marginLeft: 'auto' }}
+                    onClick={(e) => { e.stopPropagation(); printBill(bill.bill_no) }}>Print</Button>
+                  <RightOutlined style={{ color: SUB, fontSize: 11 }} />
                 </div>
               </div>
             ))}
           </div>
         )
       ) : (
-        <Card style={{ borderRadius: 12 }}>
+        <Card style={{ borderRadius: 14 }} styles={{ body: { padding: 8 } }}>
           <Table
+            className="bh-table"
             dataSource={bills} columns={columns} rowKey="bill_no"
             loading={loading} size="middle"
-            pagination={{ pageSize: 20, showSizeChanger: true }}
-            scroll={{ x: 700 }}
+            locale={{ emptyText: empty }}
+            onRow={(rec) => ({ onClick: () => viewDetail(rec.bill_no) })}
+            pagination={{ pageSize: 20, showSizeChanger: true, hideOnSinglePage: true }}
+            scroll={{ x: 820 }}
           />
         </Card>
       )}
 
       {/* ── Bill Detail Modal ─────────────────────────────────────── */}
       <Modal
-        title={`Bill Detail — ${detailBill?.bill_no}`}
+        title={d ? <span>Bill {d.bill_no} <span style={{ marginLeft: 6 }}>{statusTag(d.status)}</span></span> : ''}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={[
           canReturn && (
             <Button key="return" icon={<RollbackOutlined />} onClick={openReturnModal}>
-              Return Items
+              Return items
             </Button>
           ),
-          <Button key="pdf" type="primary" icon={<PrinterOutlined />}
-            onClick={async () => {
-              try {
-                const paper = localStorage.getItem('receipt_paper_size') || '3inch'
-                await printPdfWithAuth(`/bills/${detailBill?.bill_no}/receipt-pdf?paper=${paper}`)
-              }
-              catch (err) { message.error('PDF failed: ' + err.message) }
-            }}>
-            Print PDF
+          <Button key="pdf" type="primary" icon={<PrinterOutlined />} onClick={() => printBill(d?.bill_no)}>
+            Print receipt
           </Button>,
-          <Button key="close" onClick={() => setModalOpen(false)}>Close</Button>,
         ]}
         width={640}
       >
-        {detailBill && (
+        {d && (
           <>
-            <Descriptions bordered size="small" column={2}>
-              <Descriptions.Item label="Bill No">{detailBill.bill_no}</Descriptions.Item>
-              <Descriptions.Item label="Date">{detailBill.bill_date} {detailBill.bill_time}</Descriptions.Item>
-              <Descriptions.Item label="Customer">{detailBill.customer_name}</Descriptions.Item>
-              <Descriptions.Item label="Phone">{detailBill.phone || '-'}</Descriptions.Item>
-              <Descriptions.Item label="Payment">{detailBill.payment_mode}</Descriptions.Item>
-              <Descriptions.Item label="Status">
-                <Tag color={STATUS_COLORS[detailBill.status] || 'default'}>{detailBill.status}</Tag>
-              </Descriptions.Item>
-            </Descriptions>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0 24px', marginBottom: 12 }}>
+              <div className="bh-row"><span>Customer</span><b>{d.customer_name || 'Walk-in'}</b></div>
+              <div className="bh-row"><span>Date</span><b>{fmtDate(d.bill_date)} {d.bill_time}</b></div>
+              <div className="bh-row"><span>Phone</span><b>{d.phone || '—'}</b></div>
+              <div className="bh-row"><span>Payment</span><b>{d.payment_mode}</b></div>
+              {d.cashier && <div className="bh-row"><span>Billed by</span><b>{d.cashier}</b></div>}
+            </div>
 
-            <Divider />
-            <Table
-              dataSource={detailBill.items} rowKey="id" size="small" pagination={false}
-              columns={[
-                { title: 'Product', dataIndex: 'product_name', key: 'product_name' },
-                { title: 'Size', dataIndex: 'size', key: 'size', width: 60 },
-                { title: 'Qty', dataIndex: 'qty', key: 'qty', width: 50 },
-                { title: 'Price', dataIndex: 'selling_price', key: 'selling_price', render: (v) => `${sym}${v}` },
-                { title: 'Total', dataIndex: 'total', key: 'total', render: (v) => `${sym}${Math.round(v)}` },
-              ]}
-            />
+            <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+              {d.items.map((it) => (
+                <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: TEXT, fontWeight: 600 }}>{it.product_name}</div>
+                    <div style={{ fontSize: 12.5, color: SUB }}>
+                      {[it.size, it.color].filter(Boolean).join(' · ')}{(it.size || it.color) ? ' · ' : ''}{it.qty} × {money(it.selling_price)}
+                    </div>
+                  </div>
+                  <b style={{ color: TEXT, whiteSpace: 'nowrap' }}>{money(it.qty * it.selling_price)}</b>
+                </div>
+              ))}
+            </div>
 
-            <Divider />
-            <Descriptions size="small" column={2}>
-              <Descriptions.Item label="Subtotal">{sym}{Math.round(detailBill.subtotal)}</Descriptions.Item>
-              {detailBill.discount > 0 && (
-                <Descriptions.Item label="Discount">-{sym}{Math.round(detailBill.discount)}</Descriptions.Item>
-              )}
-              <Descriptions.Item label="GST">{sym}{Math.round(detailBill.gst_total)}</Descriptions.Item>
-              <Descriptions.Item label={<Text strong>Grand Total</Text>}>
-                <Text strong style={{ fontSize: 16, color: '#1A237E' }}>
-                  {sym}{Math.round(detailBill.grand_total)}
-                </Text>
-              </Descriptions.Item>
-            </Descriptions>
+            <div style={{ maxWidth: 320, marginLeft: 'auto', marginTop: 10 }}>
+              <div className="bh-row"><span>Subtotal</span><b>{money(d.subtotal)}</b></div>
+              {d.discount > 0 && <div className="bh-row"><span>Discount</span><b style={{ color: GOOD }}>-{money(d.discount)}</b></div>}
+              {india ? (
+                <>
+                  <div className="bh-row"><span>CGST</span><b>{money(gst / 2)}</b></div>
+                  <div className="bh-row"><span>SGST</span><b>{money(gst - Math.round(gst / 2))}</b></div>
+                </>
+              ) : <div className="bh-row"><span>Tax</span><b>{money(gst)}</b></div>}
+              <div className="bh-row" style={{ borderTop: '2px solid rgba(0,0,0,0.1)', marginTop: 4, paddingTop: 8 }}>
+                <b style={{ fontSize: 15 }}>Grand total</b>
+                <b style={{ fontSize: 20, color: PRIMARY }}>{money(d.grand_total)}</b>
+              </div>
+              <div className="bh-row"><span>Paid</span><b>{money(d.amount_paid)}</b></div>
+              {d.change_amt > 0 && <div className="bh-row"><span>Change given</span><b>{money(d.change_amt)}</b></div>}
+              {d.change_amt < 0 && <div className="bh-row"><span style={{ color: BAD }}>Balance due</span><b style={{ color: BAD }}>{money(-d.change_amt)}</b></div>}
+            </div>
+            {d.notes && <div style={{ marginTop: 10, fontSize: 13, color: SUB }}>Note: {d.notes}</div>}
 
             {/* Return history */}
-            {detailBill.returns?.length > 0 && (
+            {d.returns?.length > 0 && (
               <>
-                <Divider orientation="left">Return History</Divider>
-                {detailBill.returns.map((ret) => (
-                  <Card key={ret.id} size="small" style={{ marginBottom: 8, background: '#fff7e6' }}>
-                    <Text strong>Return #{ret.id}</Text>
-                    <Text type="secondary"> — {ret.return_date} {ret.return_time}</Text>
-                    <br />
+                <Divider titlePlacement="start" style={{ margin: '16px 0 10px' }}>Returns</Divider>
+                {d.returns.map((ret) => (
+                  <div key={ret.id} style={{ background: 'rgba(185,119,14,0.08)', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                      <b style={{ color: TEXT }}>Return #{ret.id}</b>
+                      <span style={{ color: SUB, fontSize: 12.5 }}>{fmtDate(ret.return_date)} {ret.return_time}</span>
+                    </div>
                     {ret.return_items.map((ri) => (
-                      <div key={ri.id}>
-                        {ri.product_name} × {ri.return_qty} — {sym}{Math.round(ri.refund_subtotal)}
+                      <div key={ri.id} style={{ fontSize: 13, color: SUB }}>
+                        {ri.product_name} × {ri.return_qty} — {money(ri.refund_subtotal)}
                       </div>
                     ))}
-                    <div style={{ marginTop: 4 }}>
-                      <Tag color="orange">Refund: {sym}{Math.round(ret.refund_amount)}</Tag>
-                      <Tag>{ret.refund_method}</Tag>
+                    <div style={{ marginTop: 4, fontSize: 13 }}>
+                      Refund <b style={{ color: '#B9770E' }}>{money(ret.refund_amount)}</b> <span style={{ color: SUB }}>by {ret.refund_method}</span>
                     </div>
-                  </Card>
+                  </div>
                 ))}
               </>
             )}
@@ -478,65 +497,43 @@ export default function BillHistory() {
 
       {/* ── Return Items Modal ────────────────────────────────────── */}
       <Modal
-        title={`Return Items — ${detailBill?.bill_no}`}
+        title={`Return items — ${d?.bill_no}`}
         open={returnOpen}
         onCancel={() => setReturnOpen(false)}
         onOk={submitReturn}
-        okText="Process Return"
-        okButtonProps={{ loading: returnLoading, danger: true }}
+        okText="Process return"
+        okButtonProps={{ loading: returnLoading, danger: true, disabled: calcRefundTotal() === 0 }}
         width={560}
       >
-        {detailBill && (
+        {d && (
           <>
-            <Alert
-              type="info"
-              message="Enter the quantity to return for each product. Leave 0 to skip an item."
-              style={{ marginBottom: 16 }}
-              showIcon
-            />
+            <p style={{ color: SUB, marginTop: 0 }}>Choose how many of each item the customer is returning.</p>
+            {d.items.map((item) => {
+              const max = maxReturnable(item)
+              return (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: TEXT, fontWeight: 600 }}>{item.product_name}{item.size ? ` · ${item.size}` : ''}</div>
+                    <div style={{ fontSize: 12.5, color: SUB }}>
+                      Bought {item.qty}{max < item.qty ? ` · ${max} can still be returned` : ''}
+                    </div>
+                  </div>
+                  <InputNumber
+                    min={0} max={max} value={returnQtys[item.id] || 0}
+                    onChange={(v) => setReturnQtys({ ...returnQtys, [item.id]: v || 0 })}
+                    style={{ width: 80 }} disabled={max === 0} aria-label={`Return quantity for ${item.product_name}`}
+                  />
+                </div>
+              )
+            })}
 
-            <Table
-              dataSource={detailBill.items}
-              rowKey="id"
-              size="small"
-              pagination={false}
-              columns={[
-                { title: 'Product', dataIndex: 'product_name', key: 'product_name' },
-                { title: 'Size', dataIndex: 'size', key: 'size', width: 55 },
-                {
-                  title: 'Orig Qty', dataIndex: 'qty', key: 'qty', width: 75,
-                  render: (v, item) => {
-                    const max = maxReturnable(item)
-                    return <span>{v}{max < v ? <Text type="secondary"> ({max} left)</Text> : ''}</span>
-                  },
-                },
-                {
-                  title: 'Return Qty', key: 'return_qty', width: 110,
-                  render: (_, item) => {
-                    const max = maxReturnable(item)
-                    return (
-                      <InputNumber
-                        min={0} max={max} value={returnQtys[item.id] || 0}
-                        onChange={(v) => setReturnQtys({ ...returnQtys, [item.id]: v || 0 })}
-                        size="small" style={{ width: 80 }}
-                        disabled={max === 0}
-                      />
-                    )
-                  },
-                },
-              ]}
-            />
-
-            <Divider />
-
-            <Form layout="inline" style={{ marginBottom: 8 }}>
-              <Form.Item label="Refund Method">
-                <Select value={refundMethod} onChange={setRefundMethod} style={{ width: 150 }}>
-                  <Select.Option value="Cash">Cash</Select.Option>
-                  <Select.Option value="Store Credit">Store Credit</Select.Option>
-                </Select>
-              </Form.Item>
-            </Form>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '14px 0 10px', flexWrap: 'wrap' }}>
+              <span style={{ color: TEXT, fontWeight: 600 }}>Refund as</span>
+              <Radio.Group value={refundMethod} onChange={(e) => setRefundMethod(e.target.value)}>
+                <Radio value="Cash">Cash</Radio>
+                <Radio value="Store Credit">Store credit</Radio>
+              </Radio.Group>
+            </div>
 
             <Input.TextArea
               placeholder="Notes (optional)"
@@ -546,13 +543,10 @@ export default function BillHistory() {
               style={{ marginBottom: 12 }}
             />
 
-            <Card size="small" style={{ background: '#f6ffed', border: '1px solid #b7eb8f' }}>
-              <Text strong>Total Refund: </Text>
-              <Text strong style={{ fontSize: 18, color: '#389e0d' }}>
-                {sym}{calcRefundTotal().toLocaleString()}
-              </Text>
-              <Text type="secondary"> via {refundMethod}</Text>
-            </Card>
+            <div style={{ background: 'rgba(30,132,73,0.1)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: TEXT, fontWeight: 600 }}>Refund {refundMethod === 'Cash' ? 'in cash' : 'as store credit'}</span>
+              <b style={{ fontSize: 20, color: GOOD }}>{money(calcRefundTotal())}</b>
+            </div>
           </>
         )}
       </Modal>

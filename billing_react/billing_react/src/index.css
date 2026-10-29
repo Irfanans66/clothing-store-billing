@@ -97,6 +97,17 @@ body {
   outline: none !important;
   border: none !important;
 }
+/* antd v6 Select: the outlined root is the visible box */
+.ant-select.ant-select-outlined {
+  background: var(--bg) !important;
+  border: none !important;
+  box-shadow: var(--neu-inset) !important;
+  border-radius: 12px !important;
+  --ant-select-border-color: transparent;
+  --ant-select-hover-border-color: transparent;
+  --ant-select-active-border-color: transparent;
+}
+.ant-select.ant-select-outlined.ant-select-focused { box-shadow: var(--neu-inset), 0 0 0 2px rgba(47,102,144,0.25) !important; }
 /* An input inside an affix/number wrapper is one field, not a box inside a box */
 .ant-input-affix-wrapper .ant-input,
 .ant-input-number-affix-wrapper .ant-input-number,

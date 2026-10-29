@@ -378,7 +378,7 @@ export default function Dashboard() {
           icon={<WarningOutlined />} sub={counts.low_stock ? 'Tap to see items' : 'All well stocked'} onClick={() => navigate('/products?low=1')} />
         <Tile isMobile={isMobile} label="Customers owe you" value={money(credit.outstanding)} color="#B9770E"
           icon={<WalletOutlined />} sub={credit.customers ? `${credit.customers} customer${credit.customers > 1 ? 's' : ''} on credit` : 'No pending credit'}
-          onClick={() => navigate('/customers')} />
+          onClick={() => navigate('/customers?dues=1')} />
         <Tile isMobile={isMobile} label={india ? 'GST collected' : 'Tax collected'} value={money(gstMonth.gst)}
           icon={<BankOutlined />} sub={`This month · ${gstMonth.month}`} onClick={() => navigate('/reports')} />
       </div>
