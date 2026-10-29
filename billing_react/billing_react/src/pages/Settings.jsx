@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
-  Card, Tabs, Form, Input, Button, message, Typography, Alert, Switch, InputNumber, Select, Grid, Spin, Tooltip,
+  Card, Tabs, Form, Input, Button, message, Typography, Alert, Switch, InputNumber, Select, Grid, Spin, Tooltip, Modal,
 } from 'antd'
 import {
   ShopOutlined, QrcodeOutlined, PrinterOutlined, GiftOutlined, AppstoreOutlined, CheckCircleFilled,
@@ -12,6 +12,22 @@ import { getStoreProfile, updateStoreProfile, getLoyaltyProgram, updateLoyaltyPr
 import { useAuthStore } from '../store/authStore'
 import { PLATFORMS, openPaymentDashboard } from '../utils/paymentPlatforms'
 import { COUNTRIES, getCurrencyInfo, useCurrency } from '../utils/currency'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+
+// Draw page 1 of a PDF as an image (works on phones, no dark browser PDF viewer)
+async function pdfToImage(blob) {
+  const pdfjs = await import('pdfjs-dist')
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+  const doc = await pdfjs.getDocument({ data: await blob.arrayBuffer() }).promise
+  const page = await doc.getPage(1)
+  const viewport = page.getViewport({ scale: 2.2 })
+  const canvas = document.createElement('canvas')
+  canvas.width = viewport.width
+  canvas.height = viewport.height
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+  doc.destroy()
+  return canvas.toDataURL('image/png')
+}
 
 const { Title } = Typography
 const { useBreakpoint } = Grid
@@ -53,12 +69,20 @@ const CSS = `
 .st-layout-on { border-color: ${PRIMARY}; background: rgba(47,102,144,0.1); box-shadow: none; }
 .st-section { font-size: 13px; font-weight: 700; color: ${SUB}; text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 8px; }
 .st-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06); }
-.st-preview { background: #d9d4cc; border-radius: 12px; padding: 10px; }
-.st-preview iframe { width: 100%; height: 620px; border: none; border-radius: 8px; background: #fff; }
+.st-preview { background: #d9d4cc; border-radius: 12px; padding: 14px; display: flex; justify-content: center; }
+.st-preview img { width: 100%; max-width: 330px; background: #fff; box-shadow: 0 4px 18px rgba(0,0,0,0.25); border-radius: 4px; }
+.st-layout:disabled { cursor: not-allowed; opacity: 0.55; }
+.st-layout:disabled:hover { border-color: transparent; }
+.st-savebar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
 .st-choice { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 14px; cursor: pointer; border: 2px solid transparent;
   background: var(--bg); box-shadow: var(--neu-sm); font-family: inherit; width: 100%; text-align: left; }
 .st-choice-on { border-color: ${PRIMARY}; background: rgba(47,102,144,0.1); box-shadow: none; }
 @media (max-width: 1100px) { .st-receipt { grid-template-columns: 1fr; } }
+@media (max-width: 767px) {
+  .st-layouts { grid-template-columns: 1fr; }
+  .st-savebar-sticky { position: fixed; left: 10px; right: 10px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 990;
+    margin: 0; padding: 10px 12px; border-radius: 14px; background: var(--bg); box-shadow: 0 6px 24px rgba(0,0,0,0.22); }
+}
 `
 
 // Small sketch of each receipt layout so the choice is visual, not just a name
@@ -130,8 +154,9 @@ export default function Settings() {
   // Receipt settings (saved with the store, so every device and WhatsApp links use them)
   const [receipt, setReceipt] = useState(null)
   const [savedReceipt, setSavedReceipt] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewImg, setPreviewImg] = useState(null)
   const [previewing, setPreviewing] = useState(false)
+  const [phonePreview, setPhonePreview] = useState(false)
   const previewTimer = useRef(null)
   const fileRef = useRef(null)
 
@@ -175,7 +200,8 @@ export default function Settings() {
     previewTimer.current = setTimeout(() => {
       setPreviewing(true)
       getReceiptPreview(receipt)
-        .then((blob) => setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob) }))
+        .then(pdfToImage)
+        .then(setPreviewImg)
         .catch(() => message.error('Could not build the preview'))
         .finally(() => setPreviewing(false))
     }, 500)
@@ -224,13 +250,10 @@ export default function Settings() {
   }
 
   async function openFullPreview() {
-    const win = window.open('', '_blank')
-    try {
-      const blob = await getReceiptPreview(receipt)
-      const url = URL.createObjectURL(blob)
-      if (win) win.location.href = url
-      else window.location.href = url
-    } catch (err) { win?.close(); message.error(err.message) }
+    setPhonePreview(true)
+    setPreviewImg(null)
+    try { setPreviewImg(await pdfToImage(await getReceiptPreview(receipt))) }
+    catch (err) { message.error(err.message); setPhonePreview(false) }
   }
 
   async function onLogoFile(e) {
@@ -268,13 +291,16 @@ export default function Settings() {
             <div className="st-layouts" role="radiogroup" aria-label={group}>
               {RECEIPT_LAYOUTS.filter((l) => l.group === group).map((l) => {
                 const on = receipt.receipt_design === l.value
+                const locked = l.value === 'design4' && !profile?.gstin
                 return (
-                  <button key={l.value} type="button" role="radio" aria-checked={on}
+                  <button key={l.value} type="button" role="radio" aria-checked={on} disabled={locked}
                     className={`st-layout${on ? ' st-layout-on' : ''}`} onClick={() => setR({ receipt_design: l.value })}>
                     <LayoutSketch value={l.value} />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 700, color: on ? PRIMARY : TEXT, fontSize: 13.5 }}>{l.name}</div>
-                      <div style={{ fontSize: 12, color: SUB, lineHeight: 1.35, marginTop: 2 }}>{l.desc}</div>
+                      <div style={{ fontSize: 12, color: SUB, lineHeight: 1.35, marginTop: 2 }}>
+                        {locked ? <>Needs a GSTIN. <a onClick={(e) => { e.stopPropagation(); changeTab('info') }} style={{ color: PRIMARY, pointerEvents: 'auto' }}>Add GSTIN in Store tab</a></> : l.desc}
+                      </div>
                     </div>
                     {on && <CheckCircleFilled style={{ position: 'absolute', top: 8, right: 8, color: PRIMARY, fontSize: 16 }} />}
                   </button>
@@ -283,11 +309,6 @@ export default function Settings() {
             </div>
           </div>
         ))}
-        {receipt.receipt_design === 'design4' && !profile?.gstin && (
-          <Alert type="warning" showIcon style={{ marginBottom: 8 }}
-            message="The tax invoice needs your GSTIN."
-            description={<a onClick={() => changeTab('info')} style={{ color: PRIMARY }}>Add it under Store</a>} />
-        )}
 
         <div className="st-section">2. What the receipt says</div>
         <div style={{ display: 'grid', gap: 12 }}>
@@ -331,13 +352,28 @@ export default function Settings() {
           </div>
         ))}
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 18, flexWrap: 'wrap' }}>
-          <Button type="primary" size="large" loading={saving} onClick={saveReceipt} disabled={!receiptDirty}>Save receipt settings</Button>
-          {isMobile && <Button size="large" icon={<EyeOutlined />} onClick={openFullPreview}>Preview receipt</Button>}
-          <span style={{ fontSize: 13, color: receiptDirty ? '#B9770E' : GOOD }}>
-            {receiptDirty ? 'Unsaved changes' : <><CheckCircleFilled /> Saved</>}
-          </span>
+        {isMobile && !receiptDirty && <Button block size="large" icon={<EyeOutlined />} onClick={openFullPreview} style={{ marginTop: 16 }}>Preview receipt</Button>}
+        <div className={`st-savebar${receiptDirty ? ' st-savebar-sticky' : ''}`}>
+          {receiptDirty ? (
+            isMobile ? (
+              // Phone: one compact row pinned above the menu, with Preview inside it
+              <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                <Button icon={<EyeOutlined />} onClick={openFullPreview} aria-label="Preview receipt">Preview</Button>
+                <Button onClick={() => setReceipt(savedReceipt || receipt)} disabled={!savedReceipt}>Discard</Button>
+                <Button type="primary" loading={saving} onClick={saveReceipt} style={{ flex: 1 }}>Save</Button>
+              </div>
+            ) : (
+              <>
+                <span style={{ fontSize: 13, color: '#B9770E', fontWeight: 600, marginRight: 'auto' }}>Unsaved changes</span>
+                <Button onClick={() => setReceipt(savedReceipt || receipt)} disabled={!savedReceipt}>Discard</Button>
+                <Button type="primary" size="large" loading={saving} onClick={saveReceipt}>Save receipt settings</Button>
+              </>
+            )
+          ) : (
+            <span style={{ fontSize: 13.5, color: GOOD, fontWeight: 600 }}><CheckCircleFilled /> All changes saved</span>
+          )}
         </div>
+        {isMobile && receiptDirty && <div style={{ height: 70 }} />}
       </div>
 
       {!isMobile && (
@@ -346,14 +382,13 @@ export default function Settings() {
             <span style={{ fontWeight: 700, color: TEXT }}>Preview <span style={{ fontWeight: 400, color: SUB, fontSize: 12.5 }}>· sample bill, {layout?.name}</span></span>
             <span>
               {previewing && <Spin size="small" style={{ marginRight: 8 }} />}
-              <Tooltip title="Open full size"><Button size="small" icon={<EyeOutlined />} onClick={openFullPreview} aria-label="Open preview full size" /></Tooltip>
               <Tooltip title="Refresh"><Button size="small" icon={<ReloadOutlined />} onClick={() => setR({})} style={{ marginLeft: 6 }} aria-label="Refresh preview" /></Tooltip>
             </span>
           </div>
           <div className="st-preview">
-            {previewUrl
-              ? <iframe title="Receipt preview" src={`${previewUrl}#toolbar=0&navpanes=0&view=FitH`} />
-              : <div style={{ height: 620, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin /></div>}
+            {previewImg
+              ? <img src={previewImg} alt={`Sample receipt in the ${layout?.name} layout`} style={{ opacity: previewing ? 0.6 : 1 }} />
+              : <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin /></div>}
           </div>
         </div>
       )}
@@ -362,6 +397,11 @@ export default function Settings() {
 
   return (
     <div>
+      <Modal open={phonePreview} onCancel={() => setPhonePreview(false)} footer={null} title="Receipt preview" width={420} centered>
+        <div className="st-preview">
+          {previewImg ? <img src={previewImg} alt="Sample receipt" /> : <div style={{ padding: 60 }}><Spin /></div>}
+        </div>
+      </Modal>
       <style>{CSS}</style>
       <Title level={isMobile ? 4 : 3} style={{ margin: '0 0 12px', color: TEXT }}>Store settings</Title>
       <Card style={{ borderRadius: 14, maxWidth: 1180 }} styles={{ body: { padding: isMobile ? 12 : 24 } }}>

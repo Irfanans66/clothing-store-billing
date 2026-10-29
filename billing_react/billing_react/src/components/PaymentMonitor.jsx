@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { Tooltip } from 'antd'
+import { useLocation } from 'react-router-dom'
 import { PLATFORMS, openPaymentDashboard } from '../utils/paymentPlatforms'
 
 export default function PaymentMonitor() {
   const [platform, setPlatform] = useState(() => localStorage.getItem('payment_monitor_platform') || null)
   const [open, setOpen] = useState(false)
+  const { pathname } = useLocation()
 
   useEffect(() => {
     const handler = (e) => {
@@ -14,7 +16,9 @@ export default function PaymentMonitor() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  if (!platform) return null
+  // Pages with their own fixed bars / previews: the floating button would cover them
+  const HIDDEN_ON = ['/settings', '/new-bill', '/barcode-labels']
+  if (!platform || HIDDEN_ON.some((p) => pathname.startsWith(p))) return null
 
   const p = PLATFORMS[platform]
 

@@ -180,6 +180,11 @@ def update_profile(
     changes = payload.model_dump(exclude_none=True, exclude={"plan", "notes"})
     if changes.get("logo_data") == "":
         changes["logo_data"] = None
+    # A tax invoice legally needs the store's GSTIN
+    final_design = changes.get("receipt_design", store.receipt_design)
+    final_gstin = changes["gstin"] if "gstin" in changes else store.gstin
+    if final_design == "design4" and not (final_gstin or "").strip():
+        raise HTTPException(status_code=400, detail="The tax invoice needs your GSTIN. Add it under Store first, or choose another receipt layout.")
     for field, value in changes.items():
         setattr(store, field, value)
 
