@@ -167,6 +167,7 @@ export default function NewBill() {
   const [loyaltyProgram, setLoyaltyProgram] = useState(null)
   const [custLoyalty, setCustLoyalty]       = useState(null)
   const [redeemPts, setRedeemPts]           = useState(0)
+  const [creditUse, setCreditUse]           = useState(0)   // store credit applied to this bill
 
   const itemInputRef = useRef(null)
   const custInputRef = useRef(null)
@@ -199,8 +200,9 @@ export default function NewBill() {
   // Fetch customer loyalty balance + last visit whenever customer changes
   useEffect(() => {
     if (!customer || customer.customer_id === 'WALKIN' || !isOnline) {
-      setCustLoyalty(null); setRedeemPts(0); setCustLastVisit(null); return
+      setCustLoyalty(null); setRedeemPts(0); setCustLastVisit(null); setCreditUse(0); return
     }
+    setCreditUse(0)
     getCustomerLoyalty(customer.customer_id)
       .then(setCustLoyalty)
       .catch(() => setCustLoyalty(null))
@@ -441,23 +443,29 @@ export default function NewBill() {
     ? Math.floor(Math.max(0, rawSub - loyDisc) * (loyaltyProgram.points_per_rupee || 0))
     : 0
 
-  const isCredit  = payTab === 'Credit'
-  const isSplit   = payTab === 'Split'
+  // Store credit (from earlier returns) pays first; everything below works on what's left to pay
+  const creditAvail = realCustomer ? Math.floor(customer.store_credit || 0) : 0
+  const creditUsed  = Math.min(creditUse || 0, creditAvail, grand)
+  const payable     = grand - creditUsed
+  const toPay       = payable > 0
+
+  const isCredit  = toPay && payTab === 'Credit'
+  const isSplit   = toPay && payTab === 'Split'
   const payMode   = payTab === 'Card' ? cardMode : payTab
-  const upfront   = isCredit ? Math.max(0, grand - creditAmount) : grand
+  const upfront   = isCredit ? Math.max(0, payable - creditAmount) : payable
   const isPartialCredit = isCredit && upfront > 0
-  const tendered  = payTab === 'Cash' ? (cashGiven ?? grand) : grand
-  const change    = Math.round(tendered - grand)
-  const splitAAmt = Math.min(Math.max(0, splitA.amount || 0), grand)
-  const splitBAmt = grand - splitAAmt
+  const tendered  = payTab === 'Cash' ? (cashGiven ?? payable) : payable
+  const change    = Math.round(tendered - payable)
+  const splitAAmt = Math.min(Math.max(0, splitA.amount || 0), payable)
+  const splitBAmt = payable - splitAAmt
   const upiId     = storeProfile?.upi_id?.trim()
-  const needsUpiConfirm = payTab === 'UPI' && !!upiId && !upiConfirmed
-  const shortCash = payTab === 'Cash' && change < 0
-  const splitInvalid = isSplit && (splitAAmt <= 0 || splitAAmt >= grand || splitA.mode === splitB)
+  const needsUpiConfirm = toPay && payTab === 'UPI' && !!upiId && !upiConfirmed
+  const shortCash = toPay && payTab === 'Cash' && change < 0
+  const splitInvalid = isSplit && (splitAAmt <= 0 || splitAAmt >= payable || splitA.mode === splitB)
 
   // When switching TO Credit, default to full credit (upfront = 0)
   useEffect(() => {
-    if (isCredit) setCreditAmount(grand)
+    if (isCredit) setCreditAmount(payable)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCredit])
 
@@ -465,7 +473,7 @@ export default function NewBill() {
     setCart([]); setCustomer(null); setWalkIn(false)
     setCustSearch(''); setCustResults([])
     setDiscVal(0); setNotes(''); setCreditAmount(0); setRedeemPts(0)
-    setCashGiven(null); setUpiConfirmed(false); setPayTab('Cash')
+    setCashGiven(null); setUpiConfirmed(false); setPayTab('Cash'); setCreditUse(0)
     setSplitA({ mode: 'Cash', amount: 0 })
   }
 
@@ -515,6 +523,7 @@ export default function NewBill() {
     }
     const cust = customer || { customer_id: 'WALKIN', name: 'Walk-in', phone: '' }
     const splitNote = isSplit ? `Split: ${splitA.mode} ${sym}${splitAAmt} + ${splitB} ${sym}${splitBAmt}` : ''
+    const creditNote = creditUsed > 0 ? `Store credit used ${sym}${creditUsed}` : ''
 
     setBilling(true)
     try {
@@ -528,9 +537,10 @@ export default function NewBill() {
           selling_price: it.selling_price, gst_pct: it.gst_pct,
         })),
         discount: disc, discount_type: discType,
-        payment_mode: isPartialCredit ? `${splitPayMode}+Credit` : isSplit ? `${splitA.mode}+${splitB}` : payMode,
-        amount_paid: isCredit ? upfront : tendered,
-        notes: [splitNote, notes].filter(Boolean).join(' · '),
+        payment_mode: !toPay ? 'Store Credit' : isPartialCredit ? `${splitPayMode}+Credit` : isSplit ? `${splitA.mode}+${splitB}` : payMode,
+        amount_paid: !toPay ? 0 : isCredit ? upfront : tendered,
+        store_credit_used: creditUsed,
+        notes: [creditNote, splitNote, notes].filter(Boolean).join(' · '),
         points_redeemed: effRedeemPts,
       }
 
@@ -669,6 +679,7 @@ export default function NewBill() {
             <span>Total spend: <b style={{ color: TEXT }}>{money(customer.total_purchase)}</b></span>
             {customer.credit_balance > 0 && <span style={{ color: BAD }}>Owes: <b>{money(customer.credit_balance)}</b></span>}
             {loyaltyProgram?.enabled && custLoyalty && <span>Points: <b style={{ color: TEXT }}>{custLoyalty.loyalty_pts || 0}</b></span>}
+            {customer.store_credit > 0 && <span style={{ color: GOOD }}>Store credit: <b>{money(customer.store_credit)}</b></span>}
           </div>
         </div>
       )}
@@ -882,19 +893,48 @@ export default function NewBill() {
             </div>
           )}
 
+          {creditAvail > 0 && (
+            <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(30,132,73,0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13.5, color: TEXT, marginRight: 'auto' }}>
+                  Use store credit <span style={{ color: SUB, fontSize: 12 }}>({money(creditAvail)} available)</span>
+                </span>
+                <InputNumber size="small" min={0} max={Math.min(creditAvail, grand)} value={creditUse || null} placeholder="0"
+                  prefix={sym} onChange={(v) => { setCreditUse(v || 0); setCashGiven(null); setUpiConfirmed(false) }} style={{ width: 100 }}
+                  aria-label="Store credit to use" />
+                <Button size="small" onClick={() => { setCreditUse(Math.min(creditAvail, grand)); setCashGiven(null); setUpiConfirmed(false) }}>Use max</Button>
+              </div>
+              {creditUsed > 0 && (
+                <div className="nb-sum-row" style={{ marginTop: 6 }}>
+                  <span>Paid from store credit</span><b style={{ color: GOOD }}>-{money(creditUsed)}</b>
+                </div>
+              )}
+            </div>
+          )}
+          {creditUsed > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8 }}>
+              <span style={{ fontWeight: 700, color: TEXT }}>Left to pay</span>
+              <span style={{ fontWeight: 800, color: PRIMARY, fontSize: 20 }}>{money(payable)}</span>
+            </div>
+          )}
+
           {/* Payment */}
           <Divider style={{ margin: '14px 0 10px' }} />
+          {!toPay ? (
+            <Alert type="success" showIcon message={`Fully paid from store credit (${money(creditUsed)})`} />
+          ) : (
           <div style={{ overflowX: 'auto' }}>
             <Segmented block value={payTab} onChange={(v) => { setPayTab(v); setUpiConfirmed(false); setCashGiven(null) }}
               options={PAY_TABS.map((t) => ({ value: t, label: t === 'Credit' ? (isMobile ? 'Later' : 'Pay later') : t }))} />
           </div>
+          )}
 
-          {payTab === 'Cash' && (
+          {toPay && payTab === 'Cash' && (
             <div style={{ marginTop: 10 }}>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, color: SUB, marginRight: 4 }}>Cash received</span>
                 <Button size="small" className={`nb-chip${cashGiven == null ? ' nb-chip-on' : ''}`} onClick={() => setCashGiven(null)}>Exact</Button>
-                {CASH_NOTES.filter((n) => n >= grand).slice(0, 3).concat(CASH_NOTES.every((n) => n < grand) ? [Math.ceil(grand / 500) * 500] : []).map((n) => (
+                {CASH_NOTES.filter((n) => n >= payable).slice(0, 3).concat(CASH_NOTES.every((n) => n < payable) ? [Math.ceil(payable / 500) * 500] : []).map((n) => (
                   <Button key={n} size="small" className={`nb-chip${cashGiven === n ? ' nb-chip-on' : ''}`} onClick={() => setCashGiven(n)}>{money(n)}</Button>
                 ))}
                 <InputNumber size="small" min={0} placeholder="Other" value={cashGiven != null && !CASH_NOTES.includes(cashGiven) ? cashGiven : null}
@@ -910,27 +950,27 @@ export default function NewBill() {
             </div>
           )}
 
-          {payTab === 'Card' && (
+          {toPay && payTab === 'Card' && (
             <Radio.Group value={cardMode} onChange={(e) => setCardMode(e.target.value)} style={{ marginTop: 10 }}>
               {CARD_MODES.map((m) => <Radio key={m} value={m}>{m}</Radio>)}
             </Radio.Group>
           )}
 
-          {payTab === 'UPI' && (
+          {toPay && payTab === 'UPI' && (
             upiId ? (
               <div style={{ marginTop: 10, borderRadius: 12, padding: 12, border: `2px solid ${upiConfirmed ? GOOD : '#E0A030'}`, textAlign: 'center' }}>
                 {!upiConfirmed ? (
                   <>
                     <div style={{ display: 'inline-block', background: '#fff', padding: 8, borderRadius: 10 }}>
                       <QRCodeSVG size={isMobile ? 150 : 170} level="M"
-                        value={`upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(storeName || '')}&am=${grand}&cu=INR`} />
+                        value={`upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(storeName || '')}&am=${payable}&cu=INR`} />
                     </div>
-                    <div style={{ fontSize: 13, color: SUB, margin: '6px 0 10px' }}>Scan to pay <b style={{ color: TEXT }}>{money(grand)}</b> · {upiId}</div>
+                    <div style={{ fontSize: 13, color: SUB, margin: '6px 0 10px' }}>Scan to pay <b style={{ color: TEXT }}>{money(payable)}</b> · {upiId}</div>
                     <Button type="primary" block onClick={() => setUpiConfirmed(true)} style={{ background: GOOD }}>Payment received</Button>
                   </>
                 ) : (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <b style={{ color: GOOD }}>UPI payment of {money(grand)} confirmed</b>
+                    <b style={{ color: GOOD }}>UPI payment of {money(payable)} confirmed</b>
                     <Button size="small" type="text" danger onClick={() => setUpiConfirmed(false)}>Undo</Button>
                   </div>
                 )}
@@ -944,7 +984,7 @@ export default function NewBill() {
             <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Select size="small" value={splitA.mode} onChange={(m) => setSplitA((s) => ({ ...s, mode: m }))} options={SPLIT_MODES.map((m) => ({ value: m, label: m }))} style={{ width: 120 }} />
-                <InputNumber size="small" min={1} max={grand - 1} value={splitA.amount || null} placeholder="Amount"
+                <InputNumber size="small" min={1} max={payable - 1} value={splitA.amount || null} placeholder="Amount"
                   onChange={(v) => setSplitA((s) => ({ ...s, amount: v || 0 }))} prefix={sym} style={{ flex: 1 }} />
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -959,8 +999,8 @@ export default function NewBill() {
             <div style={{ marginTop: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 13, color: SUB, flex: 1 }}>Amount on credit</span>
-                <InputNumber size="small" value={creditAmount} min={0} max={grand}
-                  onChange={(v) => setCreditAmount(Math.min(grand, Math.max(0, v || 0)))} prefix={sym} style={{ width: 120 }} />
+                <InputNumber size="small" value={creditAmount} min={0} max={payable}
+                  onChange={(v) => setCreditAmount(Math.min(payable, Math.max(0, v || 0)))} prefix={sym} style={{ width: 120 }} />
               </div>
               {!realCustomer && <Alert style={{ marginTop: 8 }} type="warning" showIcon message="Select a customer — credit is added to their account." />}
               {isPartialCredit ? (

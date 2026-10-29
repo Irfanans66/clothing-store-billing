@@ -480,7 +480,12 @@ export default function Customers() {
     {
       title: 'Owes', dataIndex: 'credit_balance', key: 'credit_balance', width: 92, align: 'right', sorter: true,
       sortOrder: sortOrder('credit_balance'), sortDirections: ['descend', 'ascend'],
-      render: (v) => (v > 0 ? <b style={{ color: BAD, whiteSpace: 'nowrap' }}>{money(v)}</b> : <span style={{ color: SUB }}>—</span>),
+      render: (v, r) => (
+        <div style={{ whiteSpace: 'nowrap' }}>
+          {v > 0 ? <b style={{ color: BAD }}>{money(v)}</b> : <span style={{ color: SUB }}>—</span>}
+          {r.store_credit > 0 && <Tooltip title="Store credit the customer can spend"><div style={{ fontSize: 12, color: GOOD }}>+{money(r.store_credit)} credit</div></Tooltip>}
+        </div>
+      ),
     },
     ...(loyaltyProgram?.enabled ? [{
       title: 'Points', dataIndex: 'loyalty_pts', key: 'loyalty_pts', width: 80, align: 'right', sorter: true,
@@ -612,6 +617,7 @@ export default function Customers() {
             <div style={{ display: 'flex', gap: '4px 14px', flexWrap: 'wrap', margin: '8px 0 10px', fontSize: 13, color: SUB }}>
               <span>Spent <b style={{ color: TEXT }}>{money(c.total_purchase)}</b></span>
               {c.credit_balance > 0 && <span>Owes <b style={{ color: BAD }}>{money(c.credit_balance)}</b></span>}
+              {c.store_credit > 0 && <span>Store credit <b style={{ color: GOOD }}>{money(c.store_credit)}</b></span>}
               {loyaltyProgram?.enabled && <span><b style={{ color: TEXT }}>{c.loyalty_pts || 0}</b> pts</span>}
               <span style={{ color: isInactive(c) ? BAD : SUB }}>Last visit {lastVisitText(c.last_visit).toLowerCase()}</span>
             </div>
@@ -688,6 +694,12 @@ export default function Customers() {
               <div className="cu-kpi"><div style={{ fontSize: 12, color: SUB }}>Last visit</div><b style={{ fontSize: 18, color: TEXT }}>{lastVisitText(p.stats.last_visit)}</b></div>
               <div className="cu-kpi"><div style={{ fontSize: 12, color: SUB }}>Owes</div><b style={{ fontSize: 18, color: pc.credit_balance > 0 ? BAD : TEXT }}>{money(pc.credit_balance)}</b></div>
               <div className="cu-kpi"><div style={{ fontSize: 12, color: SUB }}>Points</div><b style={{ fontSize: 18, color: TEXT }}>{pc.loyalty_pts || 0}</b></div>
+              {pc.store_credit > 0 && (
+                <div className="cu-kpi" style={{ gridColumn: '1 / -1', background: 'rgba(30,132,73,0.1)' }}>
+                  <div style={{ fontSize: 12, color: SUB }}>Store credit (from returns, spend on a new bill)</div>
+                  <b style={{ fontSize: 18, color: GOOD }}>{money(pc.store_credit)}</b>
+                </div>
+              )}
             </div>
             {p.next_tier && (
               <div style={{ fontSize: 12.5, color: SUB, marginBottom: 8 }}>

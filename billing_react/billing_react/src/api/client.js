@@ -58,6 +58,8 @@ export const getProducts = (params = {}) => api.get('/products/', { params })
 export const getProduct = (id) => api.get(`/products/${id}`)
 export const createProduct = (data) => api.post('/products/', data)
 export const updateProduct = (id, data) => api.patch(`/products/${id}`, data)
+export const recordLabelPrint = (data) => api.post('/products/label-prints', data)
+export const getLabelPrints = () => api.get('/products/label-prints')
 export const adjustStock = (id, delta) =>
   api.patch(`/products/${id}/stock`, null, { params: { delta } })
 

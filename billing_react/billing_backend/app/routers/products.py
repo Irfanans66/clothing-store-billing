@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_store_access, require_admin_or_manager
-from app.models.models import Product, Store
-from app.schemas.schemas import ProductCreate, ProductOut, ProductUpdate, MessageResponse
+from app.models.models import LabelPrint, Product, Store
+from app.schemas.schemas import LabelPrintIn, ProductCreate, ProductOut, ProductUpdate, MessageResponse
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -42,7 +42,7 @@ def list_products(
     category: Optional[str] = Query(None),
     low_stock: bool = Query(False, description="Return only low-stock items"),
     skip: int = 0,
-    limit: int = 200,
+    limit: int = Query(200, le=5000),
     identity: dict = Depends(require_store_access),
     db: Session = Depends(get_db),
 ):
@@ -173,6 +173,54 @@ def get_labels(
 
 
 # ── GET /products/{item_id} ───────────────────────────────────────────────────
+
+# ── Label print history ───────────────────────────────────────────────────────
+
+@router.post("/label-prints", response_model=MessageResponse)
+def record_label_print(
+    payload: LabelPrintIn,
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    """Called after labels are sent to the printer: keeps a history and marks products as printed."""
+    import json
+    sc = identity["store_code"]
+    now = datetime.datetime.now(datetime.timezone.utc)
+    rows, total = [], 0
+    for it in payload.items:
+        copies = max(0, int(it.copies))
+        if not copies:
+            continue
+        prod = db.query(Product).filter(Product.store_code == sc, Product.item_id == it.item_id).first()
+        if prod:
+            prod.last_label_printed = now
+            prod.labels_printed = (prod.labels_printed or 0) + copies
+        rows.append({"item_id": it.item_id, "product_name": prod.product_name if prod else it.item_id, "copies": copies})
+        total += copies
+    db.add(LabelPrint(store_code=sc, printed_by=identity["username"], design=payload.design,
+                      label_size=payload.label_size, layout=payload.layout, total_labels=total,
+                      items=json.dumps(rows), created_at=now))
+    db.commit()
+    return MessageResponse(message=f"Recorded {total} labels.")
+
+
+@router.get("/label-prints")
+def label_print_history(
+    limit: int = Query(30, le=200),
+    identity: dict = Depends(require_store_access),
+    db: Session = Depends(get_db),
+):
+    import json
+    sc = identity["store_code"]
+    rows = (db.query(LabelPrint).filter(LabelPrint.store_code == sc)
+            .order_by(LabelPrint.id.desc()).limit(limit).all())
+    return [
+        {"id": r.id, "printed_at": r.created_at, "printed_by": r.printed_by, "design": r.design,
+         "label_size": r.label_size, "layout": r.layout, "total_labels": r.total_labels,
+         "items": json.loads(r.items or "[]")}
+        for r in rows
+    ]
+
 
 @router.get("/{item_id}", response_model=ProductOut)
 def get_product(

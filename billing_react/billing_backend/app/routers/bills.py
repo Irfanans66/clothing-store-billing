@@ -952,6 +952,13 @@ def create_bill(
             Customer.store_code == sc, Customer.customer_id == payload.customer_id,
         ).first()
 
+    credit_used = round(max(0.0, float(payload.store_credit_used or 0)), 2)
+    if credit_used > 0:
+        if not customer:
+            raise HTTPException(status_code=400, detail="Store credit can only be used by a named customer.")
+        if credit_used > round(customer.store_credit or 0, 2):
+            raise HTTPException(status_code=400, detail=f"Customer only has ₹{customer.store_credit or 0:.0f} store credit.")
+
     redeem_pts = max(0, int(payload.points_redeemed or 0))
     if redeem_pts > 0:
         if not (program and program.enabled):
@@ -969,13 +976,16 @@ def create_bill(
     try:
         line_items, raw_sub, user_disc, loyalty_disc, adj_gst, grand, change = _compute_bill(
             payload.items, payload.discount, payload.discount_type,
-            payload.amount_paid, payload.payment_mode,
+            payload.amount_paid + credit_used, payload.payment_mode,
             loyalty_redeem_rupees=float(redeem_pts),  # 1 point = ₹1
         )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Bill calculation error: {str(e)}")
+
+    if credit_used > grand:
+        raise HTTPException(status_code=400, detail=f"Store credit used (₹{credit_used:.0f}) is more than the bill total (₹{grand}).")
 
     # Cap loyalty redemption at program.max_redeem_percent of raw_sub
     if redeem_pts > 0 and program:
@@ -1022,7 +1032,7 @@ def create_bill(
             discount_type = payload.discount_type,
             gst_total     = adj_gst,
             grand_total   = grand,
-            amount_paid   = payload.amount_paid,
+            amount_paid   = round(payload.amount_paid + credit_used, 2),
             change_amt    = change,
             payment_mode  = payload.payment_mode,
             cashier       = cashier,
@@ -1032,6 +1042,7 @@ def create_bill(
             loyalty_earned_pts   = earn_pts,
             loyalty_redeemed_pts = redeemed_pts_actual,
             stock_deducted       = True,
+            store_credit_used    = credit_used,
         )
         db.add(bill)
         db.flush()
@@ -1064,6 +1075,8 @@ def create_bill(
         if customer:
             customer.total_purchase = round((customer.total_purchase or 0) + grand, 2)
             customer.member_type = tier_for_spend(customer.total_purchase, customer.member_type)
+            if credit_used:
+                customer.store_credit = round((customer.store_credit or 0) - credit_used, 2)
             # Apply loyalty: deduct redeemed, add earned. If no program, no change.
             new_pts = (customer.loyalty_pts or 0) - redeemed_pts_actual + earn_pts
             customer.loyalty_pts = max(0, new_pts)
@@ -1119,6 +1132,7 @@ def create_bill(
         "void_reason": bill.void_reason, "voided_by": bill.voided_by, "voided_at": bill.voided_at,
         "loyalty_earned_pts": bill.loyalty_earned_pts or 0,
         "loyalty_redeemed_pts": bill.loyalty_redeemed_pts or 0,
+        "store_credit_used": bill.store_credit_used or 0,
         "wallet_link": wallet_link,
         "items": [
             {"id": r[0], "item_id": r[3], "product_name": r[4], "category": r[5],
@@ -1235,10 +1249,11 @@ def bills_summary(
     live = base.filter(Bill.status != "Void")
     count, total = live.with_entities(func.count(Bill.id), func.coalesce(func.sum(Bill.grand_total), 0)).one()
     due = sum(-c for (c,) in live.with_entities(Bill.change_amt).filter(Bill.change_amt < 0).all())
-    by_mode = {"Cash": 0.0, "UPI": 0.0, "Card": 0.0, "Credit": 0.0, "Split": 0.0}
+    by_mode = {"Cash": 0.0, "UPI": 0.0, "Card": 0.0, "Credit": 0.0, "Split": 0.0, "Store credit": 0.0}
     for mode, amt in live.with_entities(Bill.payment_mode, Bill.grand_total).all():
         m = (mode or "").lower()
-        if "+" in m and not m.endswith("+credit"): k = "Split"
+        if m.startswith("store credit"): k = "Store credit"
+        elif "+" in m and not m.endswith("+credit"): k = "Split"
         elif m == "credit" or m.endswith("+credit"): k = "Credit"
         elif "upi" in m: k = "UPI"
         elif "card" in m or "net banking" in m: k = "Card"
@@ -1295,6 +1310,7 @@ def _bill_returns_data(db: Session, bill_id: int) -> list:
             "id": r.id, "bill_no": r.bill_no, "return_date": r.return_date,
             "return_time": r.return_time, "refund_amount": r.refund_amount,
             "refund_method": r.refund_method, "processed_by": r.processed_by,
+            "due_reduced": r.due_reduced, "store_credit_added": r.store_credit_added, "cash_refund": r.cash_refund,
             "notes": r.notes, "created_at": r.created_at,
             "return_items": [
                 {
@@ -1339,6 +1355,7 @@ def get_bill(
         "void_reason": bill.void_reason, "voided_by": bill.voided_by, "voided_at": bill.voided_at,
         "loyalty_earned_pts": bill.loyalty_earned_pts or 0,
         "loyalty_redeemed_pts": bill.loyalty_redeemed_pts or 0,
+        "store_credit_used": bill.store_credit_used or 0,
         "items": [
             {"id": r[0], "item_id": r[3], "product_name": r[4], "category": r[5],
              "size": r[6], "color": r[7], "qty": r[8], "mrp": r[9],
@@ -1402,6 +1419,8 @@ def return_bill_items(
         raise HTTPException(status_code=400, detail=f"Cannot return items on a {bill.status} bill.")
     if not payload.items:
         raise HTTPException(status_code=400, detail="No items specified for return.")
+    if payload.refund_method == "Store Credit" and (bill.customer_id or "WALKIN") == "WALKIN":
+        raise HTTPException(status_code=400, detail="Store credit needs a named customer. Refund this walk-in bill in cash.")
 
     # Build map of bill_item_id -> BillItem for this bill
     bill_items = {bi.id: bi for bi in db.query(BillItem).filter(BillItem.bill_id == bill.id).all()}
@@ -1448,6 +1467,27 @@ def return_bill_items(
     total_refund = round(total_refund, 2)
     now = datetime.datetime.now()
 
+    # Settle the refund in the right order:
+    #  1. anything still unpaid on THIS bill is written off first (no cash for goods never paid for)
+    #  2. Store Credit: pays down the customer's other dues, the rest becomes store credit they can spend
+    #  3. Cash: the remainder is handed back
+    cust = None
+    if bill.customer_id and bill.customer_id != "WALKIN":
+        cust = db.query(Customer).filter(Customer.store_code == sc, Customer.customer_id == bill.customer_id).first()
+    bill_due     = max(0.0, -(bill.change_amt or 0))
+    due_reduced  = round(min(total_refund, bill_due), 2)
+    remaining    = round(total_refund - due_reduced, 2)
+    credit_added = 0.0
+    cash_refund  = 0.0
+    if payload.refund_method == "Store Credit":
+        if cust:
+            other_dues = max(0.0, (cust.credit_balance or 0) - due_reduced)
+            pay_down = round(min(remaining, other_dues), 2)
+            due_reduced = round(due_reduced + pay_down, 2)
+            credit_added = round(remaining - pay_down, 2)
+    else:
+        cash_refund = remaining
+
     try:
         # Create return record
         bill_return = BillReturn(
@@ -1458,6 +1498,9 @@ def return_bill_items(
             return_time   = now.strftime("%I:%M %p"),
             refund_amount = total_refund,
             refund_method = payload.refund_method,
+            due_reduced        = due_reduced,
+            store_credit_added = credit_added,
+            cash_refund        = cash_refund,
             processed_by  = cashier,
             notes         = payload.notes or "",
         )
@@ -1467,9 +1510,9 @@ def return_bill_items(
         for row in return_item_rows:
             db.add(BillReturnItem(return_id=bill_return.id, **row))
 
-        # Restore stock for returned products
+        # Restore stock for returned products (only if the sale took it off the shelf)
         for row in return_item_rows:
-            if row["item_id"] and row["item_id"] != "CUSTOM":
+            if bill.stock_deducted and row["item_id"] and not str(row["item_id"]).startswith("CUSTOM"):
                 prod = db.query(Product).filter(
                     Product.store_code == sc,
                     Product.item_id    == row["item_id"],
@@ -1489,18 +1532,18 @@ def return_bill_items(
                 break
         bill.status = "Returned" if all_returned else "Partial Return"
 
+        # This bill's own unpaid amount shrinks by what was written off against it
+        bill_part = min(due_reduced, bill_due)
+        if bill_part:
+            bill.change_amt = round((bill.change_amt or 0) + bill_part, 2)
+
         # Adjust customer totals
-        if bill.customer_id and bill.customer_id != "WALKIN":
-            cust = db.query(Customer).filter(
-                Customer.store_code  == sc,
-                Customer.customer_id == bill.customer_id,
-            ).first()
-            if cust:
-                cust.total_purchase = max(0.0, round((cust.total_purchase or 0) - total_refund, 2))
-                pts_deduct = int(total_refund // 100)
-                cust.loyalty_pts = max(0, (cust.loyalty_pts or 0) - pts_deduct)
-                if payload.refund_method == "Store Credit":
-                    cust.credit_balance = round((cust.credit_balance or 0) + total_refund, 2)
+        if cust:
+            cust.total_purchase = max(0.0, round((cust.total_purchase or 0) - total_refund, 2))
+            pts_deduct = int(total_refund // 100)
+            cust.loyalty_pts = max(0, (cust.loyalty_pts or 0) - pts_deduct)
+            cust.credit_balance = max(0.0, round((cust.credit_balance or 0) - due_reduced, 2))
+            cust.store_credit = round((cust.store_credit or 0) + credit_added, 2)
 
         db.commit()
         db.refresh(bill_return)
@@ -1516,6 +1559,8 @@ def return_bill_items(
         "id": bill_return.id, "bill_no": bill_return.bill_no,
         "return_date": bill_return.return_date, "return_time": bill_return.return_time,
         "refund_amount": bill_return.refund_amount, "refund_method": bill_return.refund_method,
+        "due_reduced": bill_return.due_reduced, "store_credit_added": bill_return.store_credit_added,
+        "cash_refund": bill_return.cash_refund,
         "processed_by": bill_return.processed_by, "notes": bill_return.notes,
         "created_at": bill_return.created_at,
         "return_items": [
@@ -1573,6 +1618,8 @@ def void_bill(
                 cust.credit_balance = max(0.0, round((cust.credit_balance or 0) + bill.change_amt, 2))
             cust.loyalty_pts = max(0, (cust.loyalty_pts or 0) - (bill.loyalty_earned_pts or 0)
                                    + (bill.loyalty_redeemed_pts or 0))
+            if bill.store_credit_used:
+                cust.store_credit = round((cust.store_credit or 0) + bill.store_credit_used, 2)
 
     bill.status      = "Void"
     bill.void_reason = payload.reason

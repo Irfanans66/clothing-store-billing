@@ -100,6 +100,7 @@ class Customer(Base):
     birthday        = Column(String(10), nullable=True)    # YYYY-MM-DD
     anniversary     = Column(String(10), nullable=True)    # YYYY-MM-DD
     preferences     = Column(Text, nullable=True)          # e.g. "Kurta M, prefers cotton"
+    store_credit    = Column(Float, default=0.0)           # the store owes the customer (from returns)
     created_at      = Column(DateTime, default=_now)
     updated_at      = Column(DateTime, default=_now, onupdate=_now)
 
@@ -148,10 +149,27 @@ class Product(Base):
     barcode         = Column(String(100))
     description     = Column(Text)
     inventory_date  = Column(String(20))
+    last_label_printed = Column(DateTime, nullable=True)
+    labels_printed  = Column(Integer, default=0)
     created_at      = Column(DateTime, default=_now)
     updated_at      = Column(DateTime, default=_now, onupdate=_now)
 
     store      = relationship("Store", back_populates="products")
+
+
+# ── Barcode label print history ───────────────────────────────────────────────
+class LabelPrint(Base):
+    __tablename__ = "label_prints"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    store_code   = Column(String(20), ForeignKey("stores.store_code", ondelete="CASCADE"), nullable=False, index=True)
+    printed_by   = Column(String(50))
+    design       = Column(String(20))
+    label_size   = Column(String(20))
+    layout       = Column(String(20))
+    total_labels = Column(Integer, default=0)
+    items        = Column(Text)            # JSON: [{"item_id", "product_name", "copies"}]
+    created_at   = Column(DateTime, default=_now)
 
 # ── Bills (header) ────────────────────────────────────────────────────────────
 class Bill(Base):
@@ -182,6 +200,7 @@ class Bill(Base):
     voided_by      = Column(String(50), nullable=True)
     voided_at      = Column(DateTime, nullable=True)
     stock_deducted = Column(Boolean, default=False)   # bills before stock tracking never deducted stock
+    store_credit_used = Column(Float, default=0.0)    # part of the payment made from store credit
     created_at = Column(DateTime, default=datetime.utcnow)
     # Relationship
 
@@ -227,6 +246,9 @@ class BillReturn(Base):
     return_time   = Column(String(20))
     refund_amount = Column(Float, default=0.0)
     refund_method = Column(String(20), default="Cash")
+    due_reduced        = Column(Float, nullable=True)   # unpaid amount on the bill / account written off
+    store_credit_added = Column(Float, nullable=True)
+    cash_refund        = Column(Float, nullable=True)
     processed_by  = Column(String(50))
     notes         = Column(Text)
     created_at    = Column(DateTime, default=_now)

@@ -220,6 +220,7 @@ class CustomerOut(BaseModel):
     loyalty_pts: int
     total_purchase: float
     credit_balance: float = 0.0
+    store_credit: float = 0.0
     member_since: Optional[str]
     member_type: str
     notes: Optional[str]
@@ -302,7 +303,21 @@ class ProductOut(BaseModel):
     barcode: Optional[str]
     description: Optional[str]
     inventory_date: Optional[str]
+    last_label_printed: Optional[datetime] = None
+    labels_printed: int = 0
     created_at: Optional[datetime]
+
+
+class LabelPrintItem(BaseModel):
+    item_id: str
+    copies: int
+
+
+class LabelPrintIn(BaseModel):
+    items: List[LabelPrintItem]
+    design: str = ""
+    label_size: str = ""
+    layout: str = ""
 
 
 # ── Bills ─────────────────────────────────────────────────────────────────────
@@ -343,6 +358,7 @@ class BillCreate(BaseModel):
     amount_paid: float
     notes: Optional[str] = ""
     points_redeemed: int = 0          # loyalty points redeemed on this bill (1 pt = ₹1)
+    store_credit_used: float = 0.0    # paid from the customer's store credit
 
     @field_validator("items")
     @classmethod
@@ -406,6 +422,7 @@ class BillOut(BaseModel):
     share_token: Optional[str] = None
     loyalty_earned_pts: int = 0
     loyalty_redeemed_pts: int = 0
+    store_credit_used: float = 0.0
     wallet_link: Optional[str] = None  # Only populated on customer's first bill (Add to Google Wallet URL)
     void_reason: Optional[str] = None
     voided_by: Optional[str] = None
@@ -482,6 +499,9 @@ class ReturnOut(BaseModel):
     return_time: Optional[str]
     refund_amount: float
     refund_method: str
+    due_reduced: Optional[float] = None
+    store_credit_added: Optional[float] = None
+    cash_refund: Optional[float] = None
     processed_by: Optional[str]
     notes: Optional[str]
     created_at: Optional[datetime]

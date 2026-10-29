@@ -41,6 +41,16 @@ def _migrate_db():
         "ALTER TABLE customers ADD COLUMN birthday VARCHAR(10)",
         "ALTER TABLE customers ADD COLUMN anniversary VARCHAR(10)",
         "ALTER TABLE customers ADD COLUMN preferences TEXT",
+        # Store credit: money the store owes the customer (separate from credit_balance = what they owe)
+        "ALTER TABLE customers ADD COLUMN store_credit REAL DEFAULT 0.0",
+        "ALTER TABLE bills ADD COLUMN store_credit_used REAL DEFAULT 0.0",
+        # How each refund was settled (NULL on returns made before this was tracked)
+        "ALTER TABLE bill_returns ADD COLUMN due_reduced REAL",
+        "ALTER TABLE bill_returns ADD COLUMN store_credit_added REAL",
+        "ALTER TABLE bill_returns ADD COLUMN cash_refund REAL",
+        # Barcode label printing
+        "ALTER TABLE products ADD COLUMN last_label_printed TIMESTAMP",
+        "ALTER TABLE products ADD COLUMN labels_printed INTEGER DEFAULT 0",
     ]
     for stmt in migrations:
         try:
@@ -70,6 +80,39 @@ def _backfill_tiers():
 
 
 _backfill_tiers()
+
+
+def _fix_store_credit_refunds():
+    """One-time repair: store-credit refunds used to be added to what the customer OWES.
+    Undo that, then apply the correct rule (pay down their dues first, the rest becomes store credit).
+    Returns made before the fix have store_credit_added = NULL; repaired rows get a value, so this runs once."""
+    from app.models.models import Bill, BillReturn
+    db = SessionLocal()
+    try:
+        old = db.query(BillReturn).filter(BillReturn.refund_method == "Store Credit",
+                                          BillReturn.store_credit_added.is_(None)).all()
+        for r in old:
+            bill = db.query(Bill).filter(Bill.id == r.bill_id).first()
+            cust = bill and db.query(Customer).filter(Customer.store_code == bill.store_code,
+                                                      Customer.customer_id == bill.customer_id).first()
+            amount = float(r.refund_amount or 0)
+            if cust and amount > 0:
+                owed = max(0.0, round((cust.credit_balance or 0) - amount, 2))   # remove the wrong increase
+                offset = min(amount, owed)
+                cust.credit_balance = round(owed - offset, 2)
+                cust.store_credit = round((cust.store_credit or 0) + amount - offset, 2)
+                r.due_reduced, r.store_credit_added, r.cash_refund = offset, round(amount - offset, 2), 0.0
+            else:
+                r.due_reduced, r.store_credit_added, r.cash_refund = 0.0, 0.0, 0.0
+            print(f"ℹ️  Repaired store-credit refund on {r.bill_no}: ₹{amount:.0f}")
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+_fix_store_credit_refunds()
 
 
 # ── Seed super admin if not exists ───────────────────────────────────────────

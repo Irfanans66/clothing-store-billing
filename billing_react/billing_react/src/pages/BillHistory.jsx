@@ -333,7 +333,7 @@ export default function BillHistory() {
     const init = {}
     detailBill.items.forEach((item) => { init[item.id] = 0 })
     setReturnQtys(init)
-    setRefundMethod('Cash')
+    setRefundMethod((detailBill.customer_id || 'WALKIN') === 'WALKIN' ? 'Cash' : 'Store Credit')
     setReturnNotes('')
     setReturnOpen(true)
   }
@@ -361,8 +361,13 @@ export default function BillHistory() {
     if (items.length === 0) { message.warning('Please enter at least one return quantity.'); return }
     setReturnLoading(true)
     try {
-      await returnBillItems(detailBill.bill_no, { items, refund_method: refundMethod, notes: returnNotes })
-      message.success('Return processed successfully!')
+      const res = await returnBillItems(detailBill.bill_no, { items, refund_method: refundMethod, notes: returnNotes })
+      const parts = [
+        res.due_reduced > 0 && `${money(res.due_reduced)} taken off what the customer owes`,
+        res.store_credit_added > 0 && `${money(res.store_credit_added)} added as store credit`,
+        res.cash_refund > 0 && `give back ${money(res.cash_refund)} in cash`,
+      ].filter(Boolean)
+      message.success(`Return done — ${parts.join(', ') || 'nothing to refund'}`, 6)
       setReturnOpen(false)
       setDetailBill(await getBill(detailBill.bill_no))
       fetchData({ p: 1 })
@@ -543,6 +548,7 @@ ${rows.map((b) => `<tr class="${b.status === 'Void' ? 'v' : ''}">${exportCols.sl
   const gst = d?.gst_total || 0
   const dDue = d && d.change_amt < 0 && d.status !== 'Void' ? -d.change_amt : 0
   const canReturn = d && !['Void', 'Returned'].includes(d.status)
+  const isWalkInBill = !d || (d.customer_id || 'WALKIN') === 'WALKIN'
   const canVoid = d && isAdmin && ['Paid', 'Credit', 'Partial Return'].includes(d.status)
 
   return (
@@ -792,7 +798,14 @@ ${rows.map((b) => `<tr class="${b.status === 'Void' ? 'v' : ''}">${exportCols.sl
                       <div key={ri.id} style={{ fontSize: 13, color: SUB }}>{ri.product_name} × {ri.return_qty} — {money(ri.refund_subtotal)}</div>
                     ))}
                     <div style={{ marginTop: 4, fontSize: 13 }}>
-                      Refund <b style={{ color: '#B9770E' }}>{money(ret.refund_amount)}</b> <span style={{ color: SUB }}>by {ret.refund_method}</span>
+                      Refund <b style={{ color: '#B9770E' }}>{money(ret.refund_amount)}</b>{' '}
+                      {ret.store_credit_added == null
+                        ? <span style={{ color: SUB }}>by {ret.refund_method}</span>
+                        : <span style={{ color: SUB }}>
+                            ({[ret.due_reduced > 0 && `${money(ret.due_reduced)} off dues`,
+                               ret.store_credit_added > 0 && `${money(ret.store_credit_added)} store credit`,
+                               ret.cash_refund > 0 && `${money(ret.cash_refund)} cash`].filter(Boolean).join(', ') || 'no refund due'})
+                          </span>}
                     </div>
                   </div>
                 ))}
@@ -876,14 +889,37 @@ ${rows.map((b) => `<tr class="${b.status === 'Void' ? 'v' : ''}">${exportCols.sl
               <span style={{ color: TEXT, fontWeight: 600 }}>Refund as</span>
               <Radio.Group value={refundMethod} onChange={(e) => setRefundMethod(e.target.value)}>
                 <Radio value="Cash">Cash</Radio>
-                <Radio value="Store Credit">Store credit</Radio>
+                <Tooltip title={isWalkInBill ? 'Store credit needs a named customer' : ''}>
+                  <Radio value="Store Credit" disabled={isWalkInBill}>Store credit</Radio>
+                </Tooltip>
               </Radio.Group>
             </div>
             <Input.TextArea placeholder="Notes (optional)" value={returnNotes} onChange={(e) => setReturnNotes(e.target.value)} rows={2} style={{ marginBottom: 12 }} />
-            <div style={{ background: 'rgba(30,132,73,0.1)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: TEXT, fontWeight: 600 }}>Refund {refundMethod === 'Cash' ? 'in cash' : 'as store credit'}</span>
-              <b style={{ fontSize: 20, color: GOOD }}>{money(calcRefundTotal())}</b>
-            </div>
+            {(() => {
+              // Mirrors the backend: unpaid amount on this bill is written off first
+              const total = calcRefundTotal()
+              const offDue = Math.min(total, dDue)
+              const rest = total - offDue
+              const row = (label, value, color) => (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                  <span style={{ color: TEXT }}>{label}</span><b style={{ color, fontSize: 16 }}>{money(value)}</b>
+                </div>
+              )
+              return (
+                <div style={{ background: 'rgba(30,132,73,0.1)', borderRadius: 10, padding: '10px 14px' }}>
+                  {row('Value of items returned', total, TEXT)}
+                  {offDue > 0 && row('Taken off this bill’s unpaid amount', offDue, '#B9770E')}
+                  {refundMethod === 'Cash'
+                    ? row('Give back in cash', rest, GOOD)
+                    : row('To the customer’s account', rest, GOOD)}
+                  {refundMethod !== 'Cash' && rest > 0 && (
+                    <div style={{ fontSize: 12.5, color: SUB, marginTop: 4 }}>
+                      This first clears anything else they owe; the rest becomes store credit they can spend on a new bill.
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </>
         )}
       </Modal>
