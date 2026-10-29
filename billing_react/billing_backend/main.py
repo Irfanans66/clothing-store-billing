@@ -145,14 +145,13 @@ def download_apk():
 # ── Digital Asset Links (required for TWA / Play Store) ──────────────────────
 @app.get("/.well-known/assetlinks.json", include_in_schema=False)
 def assetlinks():
+    fingerprints = [fp.strip() for fp in settings.TWA_SHA256_FINGERPRINTS.split(",") if fp.strip()]
     return JSONResponse([{
         "relation": ["delegate_permission/common.handle_all_urls"],
         "target": {
             "namespace": "android_app",
-            "package_name": "com.localbilling.app",
-            "sha256_cert_fingerprints": [
-                "B9:CB:E5:C3:77:73:13:EE:82:9C:F6:AE:D1:7F:B0:20:03:45:D0:C6:2F:AC:1D:65:D8:F0:C3:CB:A2:83:E2:F7"
-            ]
+            "package_name": settings.TWA_PACKAGE_NAME,
+            "sha256_cert_fingerprints": fingerprints
         }
     }])
 

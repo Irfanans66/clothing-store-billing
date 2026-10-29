@@ -298,6 +298,20 @@ class BillItemIn(BaseModel):
     selling_price: float
     gst_pct: float = 5.0
 
+    @field_validator("qty")
+    @classmethod
+    def qty_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("Quantity must be at least 1")
+        return v
+
+    @field_validator("mrp", "selling_price", "gst_pct")
+    @classmethod
+    def money_non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Value cannot be negative")
+        return v
+
 class BillCreate(BaseModel):
     customer_id: Optional[str] = "WALKIN"
     customer_name: Optional[str] = "Walk-in"
@@ -309,6 +323,27 @@ class BillCreate(BaseModel):
     amount_paid: float
     notes: Optional[str] = ""
     points_redeemed: int = 0          # loyalty points redeemed on this bill (1 pt = ₹1)
+
+    @field_validator("items")
+    @classmethod
+    def items_non_empty(cls, v: list) -> list:
+        if not v:
+            raise ValueError("Bill must contain at least one item")
+        return v
+
+    @field_validator("discount", "amount_paid")
+    @classmethod
+    def amounts_non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Value cannot be negative")
+        return v
+
+    @field_validator("points_redeemed")
+    @classmethod
+    def points_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("points_redeemed cannot be negative")
+        return v
 
 class BillItemOut(BaseModel):
     model_config = {"from_attributes": True}
