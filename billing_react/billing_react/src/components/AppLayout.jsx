@@ -335,7 +335,7 @@ export default function AppLayout() {
               {storeName && (
                 <Text style={{ fontSize: 13, color: '#5F5853' }}>{storeName}</Text>
               )}
-              <Tag color="blue" style={{ margin: 0, boxShadow: '2px 2px 6px rgba(163,155,140,0.4), -2px -2px 6px rgba(255,255,255,0.9)', border: 'none' }}>{role}</Tag>
+              {role !== 'SuperAdmin' && <Tag color="blue" style={{ margin: 0, boxShadow: '2px 2px 6px rgba(163,155,140,0.4), -2px -2px 6px rgba(255,255,255,0.9)', border: 'none' }}>{role}</Tag>}
               <Dropdown menu={desktopUserMenu} trigger={['click']}>
                 <Space style={{ cursor: 'pointer' }}>
                   <Avatar style={{

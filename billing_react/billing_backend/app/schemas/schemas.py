@@ -36,9 +36,12 @@ class StoreRegisterRequest(BaseModel):
     @field_validator("owner_user")
     @classmethod
     def no_spaces(cls, v: str) -> str:
+        v = v.strip().lower()
         if " " in v:
             raise ValueError("Username cannot contain spaces")
-        return v.lower()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,29}", v):
+            raise ValueError("Username must be 3–30 characters: letters, numbers, dot, dash or underscore")
+        return v
 
     @field_validator("password")
     @classmethod
@@ -51,6 +54,22 @@ class StoreRegisterRequest(BaseModel):
     def passwords_match(self) -> StoreRegisterRequest:
         if self.password != self.confirm_password:
             raise ValueError("Passwords do not match")
+        return self
+
+    @model_validator(mode="after")
+    def valid_phone(self) -> StoreRegisterRequest:
+        digits = "".join(ch for ch in (self.phone or "") if ch.isdigit())
+        if (self.country or "India") == "India":
+            # Accept +91 / 0 prefixes, store the bare 10-digit mobile number
+            if len(digits) == 12 and digits.startswith("91"):
+                digits = digits[2:]
+            elif len(digits) == 11 and digits.startswith("0"):
+                digits = digits[1:]
+            if not re.fullmatch(r"[6-9]\d{9}", digits):
+                raise ValueError("Enter a valid 10-digit mobile number")
+        elif not 7 <= len(digits) <= 15:
+            raise ValueError("Enter a valid phone number")
+        self.phone = digits
         return self
 
 
@@ -91,6 +110,7 @@ class StorePatchRequest(BaseModel):
     upi_id: Optional[str] = None
     country: Optional[str] = None
     notes: Optional[str] = None
+    is_test: Optional[bool] = None
     receipt_design: Optional[str] = None
     receipt_footer: Optional[str] = None
     receipt_policy: Optional[str] = None
@@ -577,13 +597,18 @@ class StoreStat(BaseModel):
     phone: Optional[str]
     address: Optional[str]
     plan: str
+    notes: Optional[str] = None
     is_active: bool
+    is_test: bool = False
     customers: int
     products: int
     bills: int
     revenue: float
     created_at: Optional[datetime]
     last_login: Optional[datetime]
+    last_bill_at: Optional[datetime] = None
+    today_bills: int = 0
+    today_sales: float = 0.0
 
 
 # ── Support Tickets ───────────────────────────────────────────────────────────

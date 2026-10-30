@@ -174,10 +174,10 @@ def update_profile(
     if not store:
         raise HTTPException(status_code=404, detail="Store not found.")
 
-    # Only the store owner (Admin) changes store settings; plan and admin notes belong to the Super Admin
+    # Only the store owner (Admin) changes store settings; plan, admin notes and the test flag belong to the Super Admin
     if identity["role"] != "Admin":
         raise HTTPException(status_code=403, detail="Only the store Admin can change store settings.")
-    changes = payload.model_dump(exclude_none=True, exclude={"plan", "notes"})
+    changes = payload.model_dump(exclude_none=True, exclude={"plan", "notes", "is_test"})
     if changes.get("logo_data") == "":
         changes["logo_data"] = None
     # A tax invoice legally needs the store's GSTIN

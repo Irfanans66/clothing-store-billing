@@ -15,7 +15,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res.data,
   (err) => {
-    const msg = err.response?.data?.detail || err.message || 'Request failed'
+    let msg = err.response?.data?.detail || err.message || 'Request failed'
+    // FastAPI validation errors (422) arrive as a list of { msg }
+    if (Array.isArray(msg)) msg = msg.map((d) => String(d.msg || d).replace(/^Value error, /, '')).join('. ')
     return Promise.reject(new Error(msg))
   }
 )
@@ -90,8 +92,8 @@ export const adminOverview = () => api.get('/admin/overview')
 export const adminListStores = () => api.get('/admin/stores', { timeout: 60000 })
 export const adminToggleStore = (code) => api.patch(`/admin/stores/${code}/toggle`)
 export const adminUpdateStore = (code, data) => api.patch(`/admin/stores/${code}`, data)
-export const adminDailyRevenue = () => api.get('/admin/daily-revenue')
-export const adminRevenueByStore = () => api.get('/admin/revenue-by-store')
+export const adminDailyRevenue = (days = 30) => api.get('/admin/daily-revenue', { params: { days } })
+export const adminRevenueByStore = (limit = 10) => api.get('/admin/revenue-by-store', { params: { limit } })
 export const adminListTickets = (status) => api.get('/admin/support-tickets', { params: status ? { status } : {} })
 export const adminReplyTicket = (id, data) => api.patch(`/admin/support-tickets/${id}`, data)
 export const adminDeleteTicket = (id) => api.delete(`/admin/support-tickets/${id}`)

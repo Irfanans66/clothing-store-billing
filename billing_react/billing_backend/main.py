@@ -62,6 +62,8 @@ def _migrate_db():
         # Support tickets: category + optional screenshot
         "ALTER TABLE support_tickets ADD COLUMN category VARCHAR(30)",
         "ALTER TABLE support_tickets ADD COLUMN screenshot TEXT",
+        # Super Admin: flag demo/test stores so they stay out of platform stats
+        "ALTER TABLE stores ADD COLUMN is_test BOOLEAN DEFAULT FALSE",
     ]
     for stmt in migrations:
         try:

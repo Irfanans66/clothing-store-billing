@@ -41,6 +41,7 @@ class Store(Base):
     created_at   = Column(DateTime, default=_now)
     last_login   = Column(DateTime, nullable=True)
     notes        = Column(Text, nullable=True)
+    is_test      = Column(Boolean, default=False)   # demo/test store: left out of Super Admin stats
 
     team_members = relationship(
     "StoreUser",

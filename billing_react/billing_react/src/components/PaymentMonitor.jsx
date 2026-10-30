@@ -17,7 +17,7 @@ export default function PaymentMonitor() {
   }, [])
 
   // Pages with their own fixed bars / previews: the floating button would cover them
-  const HIDDEN_ON = ['/settings', '/new-bill', '/barcode-labels']
+  const HIDDEN_ON = ['/settings', '/new-bill', '/barcode-labels', '/super-admin']
   if (!platform || HIDDEN_ON.some((p) => pathname.startsWith(p))) return null
 
   const p = PLATFORMS[platform]

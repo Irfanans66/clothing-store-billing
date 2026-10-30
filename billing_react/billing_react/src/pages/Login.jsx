@@ -280,6 +280,13 @@ export default function Login() {
     const required = { store_name: 'Store Name', phone: 'Phone', email: 'Email', address: 'Address', owner_user: 'Username', password: 'Password' }
     const missing = Object.entries(required).find(([f]) => !reg[f].trim())
     if (missing) { message.warning(`Please enter ${missing[1]}`); return }
+    if (!/^[a-z0-9][a-z0-9._-]{2,29}$/i.test(reg.owner_user.trim())) {
+      message.error('Username must be 3–30 characters: letters, numbers, dot, dash or underscore'); return
+    }
+    const phoneDigits = reg.phone.replace(/\D/g, '').replace(/^(91(?=\d{10}$)|0(?=\d{10}$))/, '')
+    if (reg.country === 'India' ? !/^[6-9]\d{9}$/.test(phoneDigits) : !/^\d{7,15}$/.test(phoneDigits)) {
+      message.error(reg.country === 'India' ? 'Enter a valid 10-digit mobile number' : 'Enter a valid phone number'); return
+    }
     if (reg.password !== reg.confirm_password) { message.error('Passwords do not match'); return }
     if (!agreed) { message.warning('Please accept the Terms of Service and Privacy Policy'); return }
     setLoading(true)
