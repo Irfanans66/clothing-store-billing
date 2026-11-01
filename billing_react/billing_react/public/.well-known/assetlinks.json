@@ -4,6 +4,7 @@
     "namespace": "android_app",
     "package_name": "com.localbilling.app",
     "sha256_cert_fingerprints": [
+      "C8:34:27:47:5F:6B:E0:0E:57:99:47:DB:CD:C2:7B:4F:E6:A7:E4:21:DA:44:BB:8B:2A:6D:E7:09:13:01:AF:83",
       "B9:CB:E5:C3:77:73:13:EE:82:9C:F6:AE:D1:7F:B0:20:03:45:D0:C6:2F:AC:1D:65:D8:F0:C3:CB:A2:83:E2:F7"
     ]
   }
