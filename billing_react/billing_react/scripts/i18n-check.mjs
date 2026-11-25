@@ -20,7 +20,7 @@ const INDIRECT = [
   'Your logo, totals box and footer bar.', 'GST breakdown table (CGST/SGST). Needs a GSTIN.', 'Store', 'UPI', 'Receipt',
   'Pay app', 'Payment app', 'Loyalty', 'Connecting to printer…', 'Printer ready', 'Printing…', 'Printer is off or too far',
   'Cash', 'Card', 'Split', 'Credit', 'Debit Card', 'Credit Card', 'Net Banking', 'Paid', 'Bill no', 'Date', 'Customer',
-  'Discount', 'Points redeemed', 'Tax', 'Payment', 'Change', 'Balance due', '{n} items', '{n} item', 'Pay later', 'Later',
+  'Discount', 'Points redeemed', 'Tax', 'Payment', 'Change given', 'Balance due', '{n} items', '{n} item', 'Pay later', 'Later',
   'Enter a valid 10-digit mobile number', 'Enter a valid phone number',
   'Printer is off or too far. Turn it on, bring it close and tap Retry.',
 ]

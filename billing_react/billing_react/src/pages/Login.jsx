@@ -478,10 +478,13 @@ export default function Login() {
                   <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)}
                     style={{ width: 16, height: 16, marginTop: 3, accentColor: PRIMARY, flexShrink: 0 }} />
                   <span>
-                    {t('I agree to the')}{' '}
-                    <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: PRIMARY, fontWeight: 600 }}>{t('Terms of Service')}</a>
-                    {' '}{t('and')}{' '}
-                    <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: PRIMARY, fontWeight: 600 }}>{t('Privacy Policy')}</a>
+                    {/* One sentence, so each language can put the two links where its word order needs them */}
+                    {t('I agree to the {terms} and {privacy}').split(/(\{terms\}|\{privacy\})/).map((part, i) =>
+                      part === '{terms}'
+                        ? <a key={i} href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: PRIMARY, fontWeight: 600 }}>{t('Terms of Service')}</a>
+                        : part === '{privacy}'
+                          ? <a key={i} href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: PRIMARY, fontWeight: 600 }}>{t('Privacy Policy')}</a>
+                          : part)}
                   </span>
                 </label>
 

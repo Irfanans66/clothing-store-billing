@@ -800,11 +800,11 @@ export default function NewBill() {
     <Dropdown trigger={['click']} menu={{
       items: held.map((h) => ({
         key: String(h.id),
-        label: <span>{h.label} · {money(h.total)} · {h.cart.length} item{h.cart.length > 1 ? 's' : ''}</span>,
+        label: <span>{h.label} · {money(h.total)} · {t(h.cart.length > 1 ? '{n} items' : '{n} item', { n: h.cart.length })}</span>,
       })),
       onClick: ({ key }) => resumeHeld(Number(key)),
     }}>
-      <Button icon={<HistoryOutlined />}>Held bills ({held.length})</Button>
+      <Button icon={<HistoryOutlined />}>{t('Held bills')} ({held.length})</Button>
     </Dropdown>
   )
 
@@ -1113,7 +1113,7 @@ export default function NewBill() {
           </div>
           {row('Payment', t(bill.payment_mode), { bold: true })}
           {row('Paid', money(bill.amount_paid))}
-          {bill.change_amt > 0 && row('Change', money(bill.change_amt), { color: GOOD, bold: true })}
+          {bill.change_amt > 0 && row('Change given', money(bill.change_amt), { color: GOOD, bold: true })}
           {bill.change_amt < 0 && row('Balance due', money(Math.abs(bill.change_amt)), { color: BAD, bold: true })}
           {bill.loyalty_earned_pts > 0 && <div style={{ fontSize: 12, color: '#9A7B1C', textAlign: 'center', marginTop: 6 }}>Earned {bill.loyalty_earned_pts} loyalty points</div>}
         </div>

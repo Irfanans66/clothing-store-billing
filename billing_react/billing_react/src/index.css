@@ -455,3 +455,6 @@ h4.ant-typography, h5.ant-typography { color: var(--text) !important; }
   .ant-space-wrap { gap: 8px !important; }
   .ant-pagination { font-size: 13px !important; }
 }
+/* Indian scripts join letters into clusters: extra letter-spacing pulls them apart.
+   <html lang> follows the shop's language (src/i18n). */
+html:not([lang="en"]) body * { letter-spacing: normal !important; }
