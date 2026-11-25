@@ -14,7 +14,8 @@ import {
   getBills, getBill, getBillsSummary, returnBillItems, voidBill, recordCreditPayment,
   getPublicReceiptUrl, getStoreProfile,
 } from '../api/client'
-import { printPdfWithAuth, openPdfWithAuth } from '../utils/pdf'
+import { openPdfWithAuth } from '../utils/pdf'
+import { printBillReceipt } from '../utils/receiptPrint'
 import { useCurrency } from '../utils/currency'
 import { useAuthStore } from '../store/authStore'
 import { whatsappNumber } from '../utils/phone'
@@ -270,9 +271,8 @@ export default function BillHistory() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function printBill(billNo) {
-    try { await printPdfWithAuth(`/bills/${billNo}/receipt-pdf`) }
-    catch (err) { message.error('Print failed: ' + err.message) }
+  function printBill(billNo) {
+    return printBillReceipt(billNo)
   }
   async function downloadBill(billNo) {
     try { await openPdfWithAuth(`/bills/${billNo}/receipt-pdf`, `Receipt_${billNo}.pdf`) }

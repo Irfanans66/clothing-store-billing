@@ -20,7 +20,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useOfflineStore } from '../store/offlineStore'
 import { useCurrency } from '../utils/currency'
-import { printPdfWithAuth, openPdfWithAuth } from '../utils/pdf'
+import { openPdfWithAuth } from '../utils/pdf'
+import { printBillReceipt } from '../utils/receiptPrint'
+import { PrinterChip } from '../components/PrinterSetup'
 import GPayButton from '../components/GPayButton'
 import CameraScanner from '../components/CameraScanner'
 import { normalizeIndianMobile, whatsappNumber, indianMobileRule } from '../utils/phone'
@@ -581,10 +583,8 @@ export default function NewBill() {
   }, [])
 
   // ── After billing ──────────────────────────────────────────────────────────
-  async function printLast() {
-    try {
-      await printPdfWithAuth(`/bills/${lastBill.bill_no}/receipt-pdf`)
-    } catch (err) { message.error('Print failed: ' + err.message) }
+  function printLast() {
+    return printBillReceipt(lastBill.bill_no)
   }
   async function downloadLast() {
     try {
@@ -1128,7 +1128,8 @@ export default function NewBill() {
       <style>{CSS}</style>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: TEXT }}>New bill</Title>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <PrinterChip />
           {heldMenu}
           <Button icon={<SwapOutlined />} onClick={() => setReturnModal(true)}>Return / Exchange</Button>
         </div>

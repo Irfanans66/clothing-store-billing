@@ -18,7 +18,7 @@ import dayjs from 'dayjs'
 import { getOverview, adjustStock, getPublicReceiptUrl } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { useCurrency } from '../utils/currency'
-import { printPdfWithAuth } from '../utils/pdf'
+import { printBillReceipt } from '../utils/receiptPrint'
 
 const { Title, Text } = Typography
 const { useBreakpoint } = Grid
@@ -241,10 +241,8 @@ export default function Dashboard() {
     window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
-  async function reprint(b) {
-    try {
-      await printPdfWithAuth(`/bills/${b.bill_no}/receipt-pdf`)
-    } catch (err) { message.error(err.message) }
+  function reprint(b) {
+    return printBillReceipt(b.bill_no)
   }
 
   const quickActions = [

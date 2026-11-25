@@ -10,6 +10,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useSearchParams } from 'react-router-dom'
 import { getStoreProfile, updateStoreProfile, getLoyaltyProgram, updateLoyaltyProgram, getReceiptPreview } from '../api/client'
 import { useAuthStore } from '../store/authStore'
+import { PrinterSection } from '../components/PrinterSetup'
 import { PLATFORMS, openPaymentDashboard } from '../utils/paymentPlatforms'
 import { COUNTRIES, getCurrencyInfo, useCurrency } from '../utils/currency'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -373,6 +374,10 @@ export default function Settings() {
             <span style={{ fontSize: 13.5, color: GOOD, fontWeight: 600 }}><CheckCircleFilled /> All changes saved</span>
           )}
         </div>
+
+        <div className="st-section">4. Printer</div>
+        {/* Bills print with the saved layout, so the printer uses that paper width too */}
+        <PrinterSection receipt={savedReceipt || receipt} getSamplePdf={() => getReceiptPreview(savedReceipt || receipt)} />
         {isMobile && receiptDirty && <div style={{ height: 70 }} />}
       </div>
 

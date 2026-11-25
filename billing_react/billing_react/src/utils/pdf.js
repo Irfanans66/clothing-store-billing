@@ -1,7 +1,7 @@
 const BASE = (import.meta.env.VITE_API_URL || '') + '/api/v1'
 const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
 
-async function _fetchPdfBlob(path) {
+export async function fetchPdfBlob(path) {
   const token = localStorage.getItem('token')
   const res = await fetch(`${BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -11,7 +11,7 @@ async function _fetchPdfBlob(path) {
 }
 
 export async function openPdfWithAuth(path, filename = 'receipt.pdf') {
-  const blob = await _fetchPdfBlob(path)
+  const blob = await fetchPdfBlob(path)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -24,7 +24,11 @@ export async function openPdfWithAuth(path, filename = 'receipt.pdf') {
 }
 
 export async function printPdfWithAuth(path) {
-  const blob = await _fetchPdfBlob(path)
+  return printPdfBlob(await fetchPdfBlob(path))
+}
+
+// System print (share sheet on phones, print dialog on desktop) for a PDF already fetched
+export async function printPdfBlob(blob) {
 
   // Mobile: use Web Share API → OS hands off to system print dialog,
   // which lists any connected Bluetooth / WiFi printer the device knows about.
