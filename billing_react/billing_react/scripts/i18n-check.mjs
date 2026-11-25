@@ -35,6 +35,8 @@ const INDIRECT = [
   'Cancelled', 'Credit (due)', 'Void', 'Returned', 'Partial Return', 'Time', 'Billed by', 'Status', 'Total', 'Due',
   'Cancel reason', 'Store Credit', 'Regular', 'Silver', 'Gold', 'Platinum', '10% off',
   'Tiers upgrade automatically: Silver from ₹10,000 spent, Gold from ₹25,000, Platinum from ₹50,000.',
+  // Terms and Privacy titles and dates
+  'Privacy Policy', 'Terms of Service', 'June 2026', 'July 2026', 'Last updated: {date}',
 ]
 
 function walk(dir) {
