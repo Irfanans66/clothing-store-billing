@@ -4,6 +4,7 @@ import { ConfigProvider, Spin, theme as antTheme } from 'antd'
 import { useAuthStore } from './store/authStore'
 import { useOfflineStore } from './store/offlineStore'
 import AppLayout from './components/AppLayout'
+import { useLangStore, isRtl } from './i18n'
 
 // Each page is its own chunk, loaded when first opened (keeps the main bundle small;
 // the PWA precaches every chunk so they still work offline)
@@ -33,6 +34,7 @@ function PrivateRoute({ children }) {
 
 export default function App() {
   const setOnline = useOfflineStore((s) => s.setOnline)
+  const rtl = isRtl(useLangStore((s) => s.lang))
 
   useEffect(() => {
     const on  = () => setOnline(true)
@@ -44,6 +46,7 @@ export default function App() {
 
   return (
     <ConfigProvider
+      direction={rtl ? 'rtl' : 'ltr'}
       theme={{
         algorithm: antTheme.defaultAlgorithm,
         token: {

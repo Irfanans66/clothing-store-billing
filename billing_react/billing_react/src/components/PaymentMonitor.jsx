@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { Tooltip } from 'antd'
 import { useLocation } from 'react-router-dom'
 import { PLATFORMS, openPaymentDashboard } from '../utils/paymentPlatforms'
+import { useT } from '../i18n'
 
 export default function PaymentMonitor() {
+  const t = useT()
   const [platform, setPlatform] = useState(() => localStorage.getItem('payment_monitor_platform') || null)
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
@@ -37,7 +39,7 @@ export default function PaymentMonitor() {
           display: 'flex', flexDirection: 'column', gap: 6,
         }}>
           <div style={{ fontSize: 11, color: '#9A9490', fontWeight: 600, padding: '0 8px 4px', letterSpacing: 0.5 }}>
-            OPEN PAYMENT DASHBOARD
+            {t('OPEN PAYMENT DASHBOARD')}
           </div>
           {['gpay','phonepe','both'].map((key) => (
             <button key={key} onClick={() => { openPaymentDashboard(key); setOpen(false) }} style={{
@@ -59,7 +61,7 @@ export default function PaymentMonitor() {
       )}
 
       {/* FAB button */}
-      <Tooltip title={`Open ${p.label}`} placement="left">
+      <Tooltip title={t('Open {name}', { name: p.label })} placement="left">
         <button
           onClick={() => {
             if (open) { setOpen(false); return }
@@ -80,7 +82,7 @@ export default function PaymentMonitor() {
           onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '6px 6px 18px rgba(163,155,140,0.55), -3px -3px 10px rgba(255,255,255,0.92)' }}
         >
           💳
-          <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.3 }}>PAY</span>
+          <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.3 }}>{t('PAY')}</span>
         </button>
       </Tooltip>
     </div>

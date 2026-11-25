@@ -1,10 +1,12 @@
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Typography } from 'antd'
+import { useT } from '../i18n'
 
 const { Text } = Typography
 
 export default function UpiQrCode({ bill, storeProfile, storeName, size = 180 }) {
+  const t = useT()
   const upiId = storeProfile?.upi_id?.trim()
   if (!upiId) return null
 
@@ -31,10 +33,10 @@ export default function UpiQrCode({ bill, storeProfile, storeName, size = 180 })
       }}
     >
       <Text strong style={{ fontSize: 15, marginBottom: 4 }}>
-        📱 Scan to Pay ₹{amount}
+        📱 {t('Scan to Pay ₹{amount}', { amount })}
       </Text>
       <Text type="secondary" style={{ fontSize: 11, marginBottom: 10 }}>
-        Any UPI app · GPay · PhonePe · Paytm
+        {t('Any UPI app · GPay · PhonePe · Paytm')}
       </Text>
       <div
         style={{
@@ -54,7 +56,7 @@ export default function UpiQrCode({ bill, storeProfile, storeName, size = 180 })
         />
       </div>
       <Text style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
-        UPI ID: <Text code style={{ fontSize: 11 }}>{upiId}</Text>
+        {t('UPI ID')}: <Text code style={{ fontSize: 11 }}>{upiId}</Text>
       </Text>
     </div>
   )

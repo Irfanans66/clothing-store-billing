@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Button, message, Tag } from 'antd'
+import { useT, translate } from '../i18n'
 
 const IS_ANDROID = /Android/i.test(navigator.userAgent)
 
@@ -11,6 +12,7 @@ const IS_ANDROID = /Android/i.test(navigator.userAgent)
  * Fallback: plain upi:// link shown as a button.
  */
 export default function GPayButton({ bill, storeProfile, storeName, size = 'middle' }) {
+  const t = useT()
   const [status, setStatus] = useState(null) // null | 'success' | 'pending' | 'fail'
   const [loading, setLoading] = useState(false)
 
@@ -29,7 +31,7 @@ export default function GPayButton({ bill, storeProfile, storeName, size = 'midd
     // Android doesn't return a result to the web page — mark as pending
     setTimeout(() => {
       setStatus('pending')
-      message.info('Check GPay / PhonePe for payment confirmation.')
+      message.info(translate('Check GPay / PhonePe for payment confirmation.'))
     }, 1500)
   }
 
@@ -69,20 +71,20 @@ export default function GPayButton({ bill, storeProfile, storeName, size = 'midd
         // GPay not available — open UPI deep link
         window.open(`upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(storeName)}&am=${amount}&cu=INR&tr=${billNo}`, '_blank')
         setStatus('pending')
-        message.info('UPI link opened. Confirm payment manually.')
+        message.info(translate('UPI link opened. Confirm payment manually.'))
         return
       }
       const response = await request.show()
       await response.complete('success')
       setStatus('success')
-      message.success(`Payment of ₹${amount} initiated via GPay!`)
+      message.success(translate('Payment of ₹{amount} initiated via GPay!', { amount }))
     } catch (err) {
       if (err.name === 'AbortError') {
         setStatus('fail')
-        message.warning('Payment cancelled.')
+        message.warning(translate('Payment cancelled.'))
       } else {
         setStatus('fail')
-        message.error('GPay error: ' + err.message)
+        message.error(translate('GPay error: {error}', { error: err.message }))
       }
     } finally {
       setLoading(false)
@@ -90,9 +92,9 @@ export default function GPayButton({ bill, storeProfile, storeName, size = 'midd
   }
 
   const statusTag = {
-    success: <Tag color="success" style={{ marginLeft: 8 }}>✓ Initiated</Tag>,
-    pending: <Tag color="warning" style={{ marginLeft: 8 }}>⏳ Pending</Tag>,
-    fail:    <Tag color="error"   style={{ marginLeft: 8 }}>✗ Cancelled</Tag>,
+    success: <Tag color="success" style={{ marginLeft: 8 }}>✓ {t('Initiated')}</Tag>,
+    pending: <Tag color="warning" style={{ marginLeft: 8 }}>⏳ {t('Pending')}</Tag>,
+    fail:    <Tag color="error"   style={{ marginLeft: 8 }}>✗ {t('Cancelled')}</Tag>,
   }[status]
 
   return (
@@ -109,7 +111,7 @@ export default function GPayButton({ bill, storeProfile, storeName, size = 'midd
         }}
         icon={<span style={{ fontSize: 15 }}>G</span>}
       >
-        Pay with GPay
+        {t('Pay with GPay')}
       </Button>
       {statusTag}
     </span>

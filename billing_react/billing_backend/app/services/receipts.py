@@ -6,9 +6,11 @@ boxes are sized to their contents, and the page height fits the content.
 
 Fonts: DejaVu Sans / Sans Mono (bundled, free licence) — they include the ₹ sign.
 Indian scripts (Hindi, Marathi, Bengali, Punjabi, Gujarati, Tamil, Telugu, Kannada,
-Malayalam) are drawn in Noto Sans and shaped with HarfBuzz (uharfbuzz), so matras and
-conjuncts join correctly; everything else stays in DejaVu. Labels follow the shop's
-language (see receipt_i18n.py); names the shop typed print exactly as typed.
+Malayalam), Arabic/Urdu and Chinese are drawn in Noto Sans and shaped with HarfBuzz
+(uharfbuzz), so matras, conjuncts and Arabic letters join correctly; everything else
+(Latin, Cyrillic, digits, ₹) stays in DejaVu. Arabic and Urdu lines run right to left and
+those receipts are mirrored (labels on the right, amounts on the left). Labels follow the
+shop's language (see receipt_i18n.py); names the shop typed print exactly as typed.
 """
 from __future__ import annotations
 
@@ -25,10 +27,10 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase import ttfonts as _ttfonts
 
-from app.services.receipt_i18n import T, T_mode, set_language, reset_language
+from app.services.receipt_i18n import T, T_mode, set_language, reset_language, is_rtl
 from reportlab.pdfbase.ttfonts import TTFont, shapeStr, ShapedStr
 
-# HarfBuzz shaping for Hindi; without it Hindi still prints, just with unjoined conjuncts
+# HarfBuzz shaping; without it Indian scripts still print, just with unjoined conjuncts
 _CAN_SHAPE = getattr(_ttfonts, "uharfbuzz", None) is not None
 from reportlab.pdfgen import canvas as rl_canvas
 
@@ -53,8 +55,8 @@ def _register_fonts():
     _fonts_ready = True
 
 
-# Indian scripts: (font key, Noto family, Unicode block). Text in these scripts is drawn in
-# Noto and shaped with HarfBuzz; everything else (Latin, digits, ₹) stays in DejaVu.
+# Non-Latin scripts: (font key, Noto family, Unicode ranges). Text in these scripts is drawn in
+# Noto and shaped with HarfBuzz; everything else (Latin, Cyrillic, digits, ₹) stays in DejaVu.
 SCRIPTS = (
     ("Deva", "Devanagari", "\u0900-\u097F\uA8E0-\uA8FF\u1CD0-\u1CFF"),   # Hindi, Marathi
     ("Beng", "Bengali",    "\u0980-\u09FF"),
@@ -64,23 +66,33 @@ SCRIPTS = (
     ("Telu", "Telugu",     "\u0C00-\u0C7F"),
     ("Knda", "Kannada",    "\u0C80-\u0CFF"),
     ("Mlym", "Malayalam",  "\u0D00-\u0D7F"),
+    ("Arab", "Arabic",     "\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF"),  # Arabic, Urdu
+    # Chinese: the font is cut down to the 7,000 GB2312 characters (everyday Simplified Chinese)
+    ("Hans", "SC",         "\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uFF00-\uFFEF"),
 )
 # ZWNJ/ZWJ keep half-forms intact and the dandas । ॥ are shared by several scripts:
 # both stay inside the run around them. Spaces between words of one script stay too.
 _JOIN = "\u200C\u200D\u0964\u0965"
-_INDIC = re.compile("[" + "".join(r for _, _, r in SCRIPTS) + "]")
+_SPECIAL = re.compile("[" + "".join(r for _, _, r in SCRIPTS) + "]")
 _SCRIPT_RUN = re.compile("|".join(
     f"(?P<{key}>[{r}{_JOIN}]+(?:[ ]+[{r}{_JOIN}]+)*)" for key, _, r in SCRIPTS))
+_ARABIC = re.compile("[" + SCRIPTS[8][2] + "]")
+_LATIN_STRONG = re.compile(r"[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]")
+_NEUTRAL = " \t:;,.!?()[]{}<>«»\"'·،؛|/"
+_EDGE = re.compile(f"^([{re.escape(_NEUTRAL)}]*)(.*?)([{re.escape(_NEUTRAL)}]*)$", re.S)  # punctuation round a run; ₹ and signs stay with the number
+_PARTS = re.compile(r"(\s+·\s+)")   # "phone · GSTIN": each part is placed on its own
+_MIRROR = str.maketrans("()[]{}<>«»", ")(][}{><»«")
 
 
 def _runs(s: str, font: str):
-    """Split text into (piece, font_name, shaped) runs: each Indian script in its Noto font, the rest in `font`."""
-    if not _INDIC.search(s):
+    """Split text into (piece, font_name, shaped) runs, in the order they are drawn left to right:
+    each script in its Noto font, the rest in `font`; right-to-left lines reordered (see _rtl_order)."""
+    if not _SPECIAL.search(s):
         return [(s, font, False)]
     bold = "-Bold" if font.endswith("-Bold") else ""
     out, pos = [], 0
     for m in _SCRIPT_RUN.finditer(s):
-        if not _INDIC.search(m.group()):      # only joiners/dandas: leave them in the base font
+        if not _SPECIAL.search(m.group()):    # only joiners/dandas: leave them in the base font
             continue
         if m.start() > pos:
             out.append((s[pos:m.start()], font, False))
@@ -88,7 +100,29 @@ def _runs(s: str, font: str):
         pos = m.end()
     if pos < len(s):
         out.append((s[pos:], font, False))
-    return out
+    return _rtl_order(s, out) if _ARABIC.search(s) else out
+
+
+def _rtl_order(s: str, runs):
+    """A small bidi pass for Arabic/Urdu lines. HarfBuzz already turns each Arabic run round;
+    here the runs themselves are put in right-to-left order. A line is right-to-left when its
+    first letter is Arabic (so an Arabic name on an English bill stays where it is).
+    Numbers and Latin words keep their own order; the spaces and punctuation around them
+    belong to the Arabic text, so they are reversed and brackets mirrored."""
+    a, l = _ARABIC.search(s), _LATIN_STRONG.search(s)
+    if l and l.start() < a.start():
+        return runs
+    out = []
+    for piece, f, shaped in runs:
+        if f.startswith("Arab"):
+            out.append((piece, f, shaped))
+            continue
+        for chunk in _PARTS.split(piece):
+            lead, core, trail = _EDGE.match(chunk).groups()
+            for part, keep in ((lead, False), (core, True), (trail, False)):
+                if part:
+                    out.append((part if keep else part[::-1].translate(_MIRROR), f, False))
+    return out[::-1]
 
 
 def _run_width(piece: str, font: str, size: float, shaped: bool) -> float:
@@ -104,9 +138,9 @@ def text_width(s: str, font: str, size: float) -> float:
 
 
 def draw_text(c, s: str, x: float, y: float, font: str, size: float, align: str = "left"):
-    """drawString / drawCentredString / drawRightString that also prints Hindi correctly."""
+    """drawString / drawCentredString / drawRightString that also prints Indian, Arabic and Chinese text correctly."""
     runs = _runs(s, font)
-    if len(runs) == 1 and not runs[0][2]:   # no Hindi: the plain, fast path
+    if len(runs) == 1 and not runs[0][2] and runs[0][1] == font:   # plain text: the fast path
         c.setFont(font, size)
         if align == "center":
             c.drawCentredString(x, y, s)
@@ -369,6 +403,8 @@ class Layout:
     def text(self, s, size=8, bold=False, align="left", color=BLACK, lead=1.3, x0=None, x1=None):
         x0 = self.x0 if x0 is None else x0
         x1 = self.x1 if x1 is None else x1
+        if is_rtl() and align != "center":
+            align = "left" if align == "right" else "right"
         for line in self.wrap(s, size, bold, x1 - x0):
             self.y -= size * lead
             x = (x0 + x1) / 2 if align == "center" else (x1 if align == "right" else x0)
@@ -380,11 +416,12 @@ class Layout:
         x1 = self.x1 if x1 is None else x1
         rw = self.sw(right, size, bold) if right else 0
         lines = self.wrap(left, size, bold if lbold is None else lbold, max(20, x1 - x0 - rw - 6))
+        lx, la, rx, ra = (x1, "right", x0, "left") if is_rtl() else (x0, "left", x1, "right")
         for i, line in enumerate(lines):
             self.y -= size * lead
-            self._draw(line, x0, self.y, size, bold if lbold is None else lbold, "left", color)
+            self._draw(line, lx, self.y, size, bold if lbold is None else lbold, la, color)
             if i == 0 and right:
-                self._draw(right, x1, self.y, size, bold, "right", rcolor or color)
+                self._draw(right, rx, self.y, size, bold, ra, rcolor or color)
 
     def rule(self, style="solid", weight=0.6, color=GREY, before=3.5, after=1.5, x0=None, x1=None):
         """A divider in the gap below the previous line — never through text."""

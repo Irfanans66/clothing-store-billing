@@ -7,10 +7,12 @@ import {
 } from 'recharts'
 import { getDailySales, getSalesByCategory, getSalesByPayment, getTopProducts, getGstSummary } from '../api/client'
 import { useCurrency } from '../utils/currency'
+import { useT } from '../i18n'
 
 const { Title } = Typography
 
 export default function Reports() {
+  const t = useT()
   const { sym } = useCurrency()
   const [daily, setDaily] = useState([])
   const [byCategory, setByCategory] = useState([])
@@ -27,23 +29,23 @@ export default function Reports() {
   }, [])
 
   const gstCols = [
-    { title: 'GST Rate %', dataIndex: 'gst_pct', key: 'gst_pct' },
-    { title: 'Line Items', dataIndex: 'line_items', key: 'line_items' },
-    { title: `Taxable Value (${sym})`, dataIndex: 'taxable_value', key: 'taxable_value',
+    { title: t('GST Rate %'), dataIndex: 'gst_pct', key: 'gst_pct' },
+    { title: t('Line Items'), dataIndex: 'line_items', key: 'line_items' },
+    { title: t('Taxable Value ({sym})', { sym }), dataIndex: 'taxable_value', key: 'taxable_value',
       render: (v) => `${sym}${Math.round(v).toLocaleString()}` },
-    { title: `GST Collected (${sym})`, dataIndex: 'gst_collected', key: 'gst_collected',
+    { title: t('GST Collected ({sym})', { sym }), dataIndex: 'gst_collected', key: 'gst_collected',
       render: (v) => `${sym}${Math.round(v).toLocaleString()}` },
   ]
 
-  const noData = <p style={{ color: '#aaa', textAlign: 'center', padding: 32 }}>No data yet</p>
+  const noData = <p style={{ color: '#aaa', textAlign: 'center', padding: 32 }}>{t('No data yet')}</p>
 
   return (
     <div>
-      <Title level={3} style={{ marginBottom: 16 }}>📊 Reports & Analytics</Title>
+      <Title level={3} style={{ marginBottom: 16 }}>📊 {t('Reports & Analytics')}</Title>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} md={12}>
-          <Card title="🛍️ Sales by Category" style={{ borderRadius: 12 }}>
+          <Card title={`🛍️ ${t('Sales by Category')}`} style={{ borderRadius: 12 }}>
             {byCategory.length ? (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={byCategory}>
@@ -59,7 +61,7 @@ export default function Reports() {
         </Col>
 
         <Col xs={24} md={12}>
-          <Card title="💳 Revenue by Payment Mode" style={{ borderRadius: 12 }}>
+          <Card title={`💳 ${t('Revenue by Payment Mode')}`} style={{ borderRadius: 12 }}>
             {byPayment.length ? (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={byPayment}>
@@ -75,7 +77,7 @@ export default function Reports() {
         </Col>
 
         <Col xs={24} md={12}>
-          <Card title="📈 Daily Revenue" style={{ borderRadius: 12 }}>
+          <Card title={`📈 ${t('Daily Revenue')}`} style={{ borderRadius: 12 }}>
             {daily.length ? (
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={daily}>
@@ -91,7 +93,7 @@ export default function Reports() {
         </Col>
 
         <Col xs={24} md={12}>
-          <Card title="🏆 Top Products by Units Sold" style={{ borderRadius: 12 }}>
+          <Card title={`🏆 ${t('Top Products by Units Sold')}`} style={{ borderRadius: 12 }}>
             {topProducts.length ? (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={topProducts} layout="vertical">
@@ -108,7 +110,7 @@ export default function Reports() {
 
         <Col xs={24}>
           <Card
-            title="📄 GST Summary"
+            title={`📄 ${t('GST Summary')}`}
             style={{ borderRadius: 12 }}
             extra={
               gstSummary.length ? (
@@ -121,7 +123,7 @@ export default function Reports() {
                     a.href = 'data:text/csv,' + encodeURIComponent(csv)
                     a.download = 'gst_summary.csv'; a.click()
                   }}>
-                  Export CSV
+                  {t('Export CSV')}
                 </Button>
               ) : null
             }

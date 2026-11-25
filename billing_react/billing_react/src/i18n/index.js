@@ -18,7 +18,17 @@ export const LANGUAGES = [
   { code: 'te', name: 'తెలుగు',     english: 'Telugu' },
   { code: 'kn', name: 'ಕನ್ನಡ',      english: 'Kannada' },
   { code: 'ml', name: 'മലയാളം',    english: 'Malayalam' },
+  { code: 'es', name: 'Español',   english: 'Spanish' },
+  { code: 'fr', name: 'Français',  english: 'French' },
+  { code: 'pt', name: 'Português', english: 'Portuguese' },
+  { code: 'ru', name: 'Русский',   english: 'Russian' },
+  { code: 'id', name: 'Bahasa Indonesia', english: 'Indonesian' },
+  { code: 'zh', name: '中文',       english: 'Chinese' },
+  { code: 'ar', name: 'العربية',    english: 'Arabic', rtl: true },
+  { code: 'ur', name: 'اردو',       english: 'Urdu', rtl: true },
 ]
+/** Arabic and Urdu read right to left: the whole app is mirrored. */
+export const isRtl = (code) => LANGUAGES.some((l) => l.code === code && l.rtl)
 export const LANGUAGE_OPTIONS = LANGUAGES.map((l) => ({
   value: l.code,
   label: l.code === 'en' ? 'English' : `${l.name} · ${l.english}`,
@@ -37,6 +47,7 @@ export const useLangStore = create(
         const dict = load ? (await load()).default : {}
         set({ lang: code, dict })
         document.documentElement.lang = code
+        document.documentElement.dir = isRtl(code) ? 'rtl' : 'ltr'
       },
       // After a reload the language is remembered but its file still has to load
       restore: () => { const { lang } = get(); if (lang !== 'en') get().setLang(lang) },

@@ -23,7 +23,7 @@ class TokenResponse(BaseModel):
     store_name: Optional[str] = None
     language: Optional[str] = None
 
-LANGUAGES = {"en", "hi", "mr", "gu", "bn", "pa", "ta", "te", "kn", "ml"}
+LANGUAGES = {"en", "hi", "mr", "gu", "bn", "pa", "ta", "te", "kn", "ml", "es", "fr", "pt", "ru", "id", "zh", "ar", "ur"}
 
 
 def _check_language(v: Optional[str]) -> Optional[str]:

@@ -11,7 +11,7 @@ import { useAuthStore } from '../store/authStore'
 import { getStoreProfile } from '../api/client'
 import OfflineBanner from './OfflineBanner'
 import PaymentMonitor from './PaymentMonitor'
-import { useT, useLangStore } from '../i18n'
+import { useT, useLangStore, isRtl } from '../i18n'
 
 const { Sider, Header, Content } = Layout
 const { Text } = Typography
@@ -279,6 +279,7 @@ export default function AppLayout() {
   const location  = useLocation()
   const { role, storeName, username, logout, setAuth } = useAuthStore()
   const [collapsed, setCollapsed] = useState(false)
+  const rtl = isRtl(useLangStore((s) => s.lang))   // Arabic/Urdu: the menu sits on the right
 
   useEffect(() => {
     if (role && role !== 'SuperAdmin') {
@@ -321,7 +322,7 @@ export default function AppLayout() {
         <Sider
           collapsible collapsed={collapsed} onCollapse={setCollapsed} trigger={null}
           width={220} collapsedWidth={84}
-          style={{ position: 'fixed', height: '100vh', left: 0, top: 0, overflow: 'auto', zIndex: 100 }}
+          style={{ position: 'fixed', height: '100vh', [rtl ? 'right' : 'left']: 0, top: 0, overflow: 'auto', zIndex: 100 }}
         >
           <BrandHeader collapsed={collapsed} storeName={storeName} />
           {collapsed
@@ -329,7 +330,7 @@ export default function AppLayout() {
             : <NavMenu menuItems={menuItems} selectedKey={path} onSelect={go} />}
         </Sider>
 
-        <Layout style={{ marginLeft: collapsed ? 84 : 220, transition: 'margin-left 0.2s' }}>
+        <Layout style={{ [rtl ? 'marginRight' : 'marginLeft']: collapsed ? 84 : 220, transition: 'margin 0.2s' }}>
           <Header style={{
             padding: '0 24px', display: 'flex', alignItems: 'center',
             justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 99, height: 56,

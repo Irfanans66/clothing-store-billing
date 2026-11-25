@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Alert, Space, Spin } from 'antd'
 import { useOfflineStore } from '../store/offlineStore'
 import { createBill } from '../api/client'
+import { useT } from '../i18n'
 
 export default function OfflineBanner() {
+  const t = useT()
   const { isOnline, pendingBills, removePendingBill } = useOfflineStore()
   const [syncing, setSyncing] = useState(false)
   const [syncedCount, setSyncedCount] = useState(0)
@@ -41,8 +43,8 @@ export default function OfflineBanner() {
         banner
         message={
           <span>
-            <strong>You are offline.</strong> Bills will be saved on your device and automatically synced when internet returns.
-            {pendingBills.length > 0 && ` (${pendingBills.length} bill${pendingBills.length > 1 ? 's' : ''} queued)`}
+            <strong>{t('You are offline.')}</strong> {t('Bills will be saved on your device and automatically synced when internet returns.')}
+            {pendingBills.length > 0 && ` (${t(pendingBills.length > 1 ? '{n} bills queued' : '{n} bill queued', { n: pendingBills.length })})`}
           </span>
         }
         style={{ borderRadius: 0 }}
@@ -59,7 +61,7 @@ export default function OfflineBanner() {
         message={
           <Space>
             <Spin size="small" />
-            <span>Syncing offline bills to server…</span>
+            <span>{t('Syncing offline bills to server…')}</span>
           </Space>
         }
         style={{ borderRadius: 0 }}
@@ -74,7 +76,7 @@ export default function OfflineBanner() {
         showIcon
         banner
         closable
-        message={`${syncedCount} offline bill${syncedCount > 1 ? 's' : ''} synced successfully!`}
+        message={t(syncedCount > 1 ? '{n} offline bills synced successfully!' : '{n} offline bill synced successfully!', { n: syncedCount })}
         style={{ borderRadius: 0 }}
         afterClose={() => setSyncedCount(0)}
       />
@@ -87,7 +89,7 @@ export default function OfflineBanner() {
         type="warning"
         showIcon
         banner
-        message={`${pendingBills.length} offline bill${pendingBills.length > 1 ? 's' : ''} pending sync.`}
+        message={t(pendingBills.length > 1 ? '{n} offline bills pending sync.' : '{n} offline bill pending sync.', { n: pendingBills.length })}
         style={{ borderRadius: 0 }}
       />
     )

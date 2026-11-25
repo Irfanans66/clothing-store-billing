@@ -19,6 +19,7 @@ import { getOverview, adjustStock, getPublicReceiptUrl } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { useCurrency } from '../utils/currency'
 import { printBillReceipt } from '../utils/receiptPrint'
+import { useT, translate } from '../i18n'
 
 const { Title, Text } = Typography
 const { useBreakpoint } = Grid
@@ -47,13 +48,13 @@ const CAN_STOCK  = new Set(['Admin', 'Manager'])
 
 const ISO = 'YYYY-MM-DD'
 
-function rangeFor(key, custom, t) {
+function rangeFor(key, custom, day) {
   switch (key) {
-    case 'today':  return [t, t]
-    case 'month':  return [t.subtract(29, 'day'), t]
-    case 'year':   return [t.startOf('year'), t]
-    case 'custom': return custom || [t.subtract(6, 'day'), t]
-    default:       return [t.subtract(6, 'day'), t]
+    case 'today':  return [day, day]
+    case 'month':  return [day.subtract(29, 'day'), day]
+    case 'year':   return [day.startOf('year'), day]
+    case 'custom': return custom || [day.subtract(6, 'day'), day]
+    default:       return [day.subtract(6, 'day'), day]
   }
 }
 
@@ -79,15 +80,15 @@ function pctChange(cur, prev) {
 
 function greeting(now) {
   const h = new Date(now).getHours()
-  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  return h < 12 ? translate('Good morning') : h < 17 ? translate('Good afternoon') : translate('Good evening')
 }
 
 function agoText(ts, now) {
   if (!ts) return ''
   const mins = Math.floor((now - ts) / 60000)
-  if (mins < 1) return 'Updated just now'
-  if (mins < 60) return `Updated ${mins} min ago`
-  return `Updated ${Math.floor(mins / 60)} h ago`
+  if (mins < 1) return translate('Updated just now')
+  if (mins < 60) return translate('Updated {mins} min ago', { mins })
+  return translate('Updated {h} h ago', { h: Math.floor(mins / 60) })
 }
 
 const CSS = `
@@ -148,8 +149,9 @@ function Tile({ icon, label, value, sub, color = PRIMARY, onClick, isMobile }) {
 }
 
 function Change({ cur, prev, label }) {
+  const t = useT()
   const p = pctChange(cur, prev)
-  if (p === null) return <span style={{ fontSize: 12, color: SUB }}>New · nothing to compare {label}</span>
+  if (p === null) return <span style={{ fontSize: 12, color: SUB }}>{t('New · nothing to compare {label}', { label })}</span>
   const up = p >= 0
   return (
     <span style={{ fontSize: 12, color: SUB }}>
@@ -175,6 +177,7 @@ function EmptyNote({ children }) {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const t = useT()
   const navigate  = useNavigate()
   const { storeName, role, country } = useAuthStore()
   const { sym } = useCurrency()
@@ -208,8 +211,8 @@ export default function Dashboard() {
   }, [s, e, requestKey])
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30000)
-    return () => clearInterval(t)
+    const timer = setInterval(() => setNow(Date.now()), 30000)
+    return () => clearInterval(timer)
   }, [])
 
   function load() {
@@ -226,7 +229,7 @@ export default function Dashboard() {
     if (!restockQty) return
     try {
       await adjustStock(restock.item_id, restockQty)
-      message.success(`Added ${restockQty} to ${restock.product_name}`)
+      message.success(t('Added {qty} to {name}', { qty: restockQty, name: restock.product_name }))
       setRestock(null)
       load()
     } catch (err) { message.error(err.message) }
@@ -236,8 +239,8 @@ export default function Dashboard() {
     const phone = (b.phone || '').replace(/\D/g, '')
     const waPhone = phone.length === 10 ? '91' + phone : phone
     const url = b.share_token ? getPublicReceiptUrl(b.share_token) : ''
-    const msg = `Hi ${b.customer_name || ''}, thank you for shopping at ${storeName}!\n` +
-      `Bill ${b.bill_no}: ${money(b.grand_total)}` + (url ? `\nReceipt: ${url}` : '')
+    const msg = t('Hi {name}, thank you for shopping at {shop}!', { name: b.customer_name || '', shop: storeName }) + '\n' +
+      t('Bill {no}: {amount}', { no: b.bill_no, amount: money(b.grand_total) }) + (url ? '\n' + t('Receipt: {url}', { url }) : '')
     window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
@@ -246,10 +249,10 @@ export default function Dashboard() {
   }
 
   const quickActions = [
-    CAN_BILL.has(role)  && { key: 'bill', label: 'New Bill', icon: <ShoppingCartOutlined />, to: '/new-bill', primary: true },
-    CAN_STOCK.has(role) && { key: 'prod', label: 'Add Product', icon: <PlusOutlined />, to: '/products?add=1' },
-    CAN_BILL.has(role)  && { key: 'cust', label: 'Add Customer', icon: <UserAddOutlined />, to: '/customers?add=1' },
-    CAN_BILL.has(role)  && { key: 'scan', label: 'Scan Barcode', icon: <ScanOutlined />, to: '/new-bill?scan=1' },
+    CAN_BILL.has(role)  && { key: 'bill', label: t('New Bill'), icon: <ShoppingCartOutlined />, to: '/new-bill', primary: true },
+    CAN_STOCK.has(role) && { key: 'prod', label: t('Add Product'), icon: <PlusOutlined />, to: '/products?add=1' },
+    CAN_BILL.has(role)  && { key: 'cust', label: t('Add Customer'), icon: <UserAddOutlined />, to: '/customers?add=1' },
+    CAN_BILL.has(role)  && { key: 'scan', label: t('Scan Barcode'), icon: <ScanOutlined />, to: '/new-bill?scan=1' },
   ].filter(Boolean)
 
   const header = (
@@ -262,9 +265,9 @@ export default function Dashboard() {
           {today.format('ddd, D MMM YYYY')}
           {updatedAt && <> · {agoText(updatedAt, now)}</>}
         </Text>
-        <AntTooltip title="Refresh">
+        <AntTooltip title={t('Refresh')}>
           <Button type="text" size="small" icon={<ReloadOutlined spin={loading} />} onClick={load}
-            aria-label="Refresh dashboard" style={{ marginLeft: 4, color: PRIMARY }} />
+            aria-label={t('Refresh dashboard')} style={{ marginLeft: 4, color: PRIMARY }} />
         </AntTooltip>
       </div>
       {quickActions.length > 0 && (
@@ -295,16 +298,16 @@ export default function Dashboard() {
   // ── First-time store: friendly start screen instead of empty charts ────────
   if (counts.bills_all_time === 0) {
     const steps = [
-      { done: counts.products > 0, title: 'Add your products', text: 'Add items with price, size and stock so billing is one tap.', action: CAN_STOCK.has(role) && ['Add Product', '/products?add=1'] },
-      { done: false, title: 'Create your first bill', text: 'Search or scan an item, choose the payment mode and print or WhatsApp the receipt.', action: CAN_BILL.has(role) && ['Create your first bill →', '/new-bill'] },
+      { done: counts.products > 0, title: t('Add your products'), text: t('Add items with price, size and stock so billing is one tap.'), action: CAN_STOCK.has(role) && [t('Add Product'), '/products?add=1'] },
+      { done: false, title: t('Create your first bill'), text: t('Search or scan an item, choose the payment mode and print or WhatsApp the receipt.'), action: CAN_BILL.has(role) && [t('Create your first bill →'), '/new-bill'] },
     ]
     return (
       <div>
         <style>{CSS}</style>
         {header}
         <Card style={{ borderRadius: 16 }} styles={{ body: { padding: isMobile ? 18 : 32 } }}>
-          <Title level={isMobile ? 4 : 3} style={{ marginTop: 0, color: TEXT }}>Welcome to Loacal Billing 👋</Title>
-          <Text style={{ color: SUB, fontSize: 14 }}>Your dashboard fills up as soon as you make sales. Two quick steps to get started:</Text>
+          <Title level={isMobile ? 4 : 3} style={{ marginTop: 0, color: TEXT }}>{t('Welcome to Loacal Billing 👋')}</Title>
+          <Text style={{ color: SUB, fontSize: 14 }}>{t('Your dashboard fills up as soon as you make sales. Two quick steps to get started:')}</Text>
           <div style={{ marginTop: 20, display: 'grid', gap: 14 }}>
             {steps.map((st, i) => (
               <div key={st.title} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
@@ -332,7 +335,7 @@ export default function Dashboard() {
     )
   }
 
-  const compareLabel = COMPARE_LABEL[period]
+  const compareLabel = t(COMPARE_LABEL[period])
   const catTotal = data.by_category.reduce((a, c) => a + c.revenue, 0)
   const payTotal = data.by_payment.reduce((a, c) => a + c.revenue, 0)
   const todayParams = { from: today.format(ISO), to: today.format(ISO) }
@@ -358,37 +361,37 @@ export default function Dashboard() {
 
       {/* Today at a glance */}
       <div style={{ fontSize: 13, fontWeight: 700, color: SUB, textTransform: 'uppercase', letterSpacing: 0.6, margin: '4px 0 8px' }}>
-        Today at a glance
+        {t('Today at a glance')}
       </div>
       <div className="db-grid db-grid-4" style={{ marginBottom: 16 }}>
-        <Tile isMobile={isMobile} label="Today's sales" value={money(todayStats.revenue)} icon={<WalletOutlined />} onClick={() => billsLink(todayParams)} />
-        <Tile isMobile={isMobile} label="Bills today" value={todayStats.bills} icon={<ShoppingCartOutlined />} onClick={() => billsLink(todayParams)} />
-        <Tile isMobile={isMobile} label="Average bill" value={money(todayStats.avg_bill)} icon={<BankOutlined />} onClick={() => billsLink(todayParams)} />
-        <Tile isMobile={isMobile} label="Items sold" value={todayStats.items_sold} icon={<ShopOutlined />} onClick={() => billsLink(todayParams)} />
+        <Tile isMobile={isMobile} label={t("Today's sales")} value={money(todayStats.revenue)} icon={<WalletOutlined />} onClick={() => billsLink(todayParams)} />
+        <Tile isMobile={isMobile} label={t('Bills today')} value={todayStats.bills} icon={<ShoppingCartOutlined />} onClick={() => billsLink(todayParams)} />
+        <Tile isMobile={isMobile} label={t('Average bill')} value={money(todayStats.avg_bill)} icon={<BankOutlined />} onClick={() => billsLink(todayParams)} />
+        <Tile isMobile={isMobile} label={t('Items sold')} value={todayStats.items_sold} icon={<ShopOutlined />} onClick={() => billsLink(todayParams)} />
       </div>
 
       {/* Store-wide cards */}
       <div className="db-grid db-grid-5" style={{ marginBottom: 16 }}>
-        <Tile isMobile={isMobile} label="Customers" value={counts.customers} icon={<TeamOutlined />} onClick={() => navigate('/customers')} />
-        <Tile isMobile={isMobile} label="Products" value={counts.products} icon={<ShopOutlined />} onClick={() => navigate('/products')} />
-        <Tile isMobile={isMobile} label="Low stock" value={counts.low_stock} color={counts.low_stock ? DOWN : UP}
-          icon={<WarningOutlined />} sub={counts.low_stock ? 'Tap to see items' : 'All well stocked'} onClick={() => navigate('/products?low=1')} />
-        <Tile isMobile={isMobile} label="Customers owe you" value={money(credit.outstanding)} color="#B9770E"
-          icon={<WalletOutlined />} sub={credit.customers ? `${credit.customers} customer${credit.customers > 1 ? 's' : ''} on credit` : 'No pending credit'}
+        <Tile isMobile={isMobile} label={t('Customers')} value={counts.customers} icon={<TeamOutlined />} onClick={() => navigate('/customers')} />
+        <Tile isMobile={isMobile} label={t('Products')} value={counts.products} icon={<ShopOutlined />} onClick={() => navigate('/products')} />
+        <Tile isMobile={isMobile} label={t('Low stock')} value={counts.low_stock} color={counts.low_stock ? DOWN : UP}
+          icon={<WarningOutlined />} sub={counts.low_stock ? t('Tap to see items') : t('All well stocked')} onClick={() => navigate('/products?low=1')} />
+        <Tile isMobile={isMobile} label={t('Customers owe you')} value={money(credit.outstanding)} color="#B9770E"
+          icon={<WalletOutlined />} sub={credit.customers ? t(credit.customers > 1 ? '{n} customers on credit' : '{n} customer on credit', { n: credit.customers }) : t('No pending credit')}
           onClick={() => navigate('/customers?dues=1')} />
-        <Tile isMobile={isMobile} label={india ? 'GST collected' : 'Tax collected'} value={money(gstMonth.gst)}
-          icon={<BankOutlined />} sub={`This month · ${gstMonth.month}`} onClick={() => navigate('/reports')} />
+        <Tile isMobile={isMobile} label={india ? t('GST collected') : t('Tax collected')} value={money(gstMonth.gst)}
+          icon={<BankOutlined />} sub={t('This month · {month}', { month: gstMonth.month })} onClick={() => navigate('/reports')} />
       </div>
 
       {/* Period: KPIs + trend */}
       <Card style={{ borderRadius: 14, marginBottom: 16 }} styles={{ body: { padding: isMobile ? 12 : 20 } }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>
-            Sales · {start.isSame(end, 'day') ? start.format('D MMM') : `${start.format('D MMM')} – ${end.format('D MMM YYYY')}`}
+            {t('Sales · {range}', { range: start.isSame(end, 'day') ? start.format('D MMM') : `${start.format('D MMM')} – ${end.format('D MMM YYYY')}` })}
           </span>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', maxWidth: '100%' }}>
             <div className="db-period" style={{ maxWidth: '100%', overflowX: 'auto' }}>
-              <Segmented value={period} onChange={setPeriod} options={PERIODS} size={isMobile ? 'small' : 'middle'} />
+              <Segmented value={period} onChange={setPeriod} options={PERIODS.map((o) => ({ ...o, label: t(o.label) }))} size={isMobile ? 'small' : 'middle'} />
             </div>
             {period === 'custom' && (
               <RangePicker
@@ -405,10 +408,10 @@ export default function Dashboard() {
 
         <div className="db-grid db-grid-4" style={{ marginBottom: 16 }}>
           {[
-            ['Revenue', money(totals.revenue), totals.revenue, prev.revenue],
-            ['Bills', totals.bills, totals.bills, prev.bills],
-            ['Average bill', money(totals.avg_bill), totals.avg_bill, prev.avg_bill],
-            ['Items sold', totals.items_sold, totals.items_sold, prev.items_sold],
+            [t('Revenue'), money(totals.revenue), totals.revenue, prev.revenue],
+            [t('Bills'), totals.bills, totals.bills, prev.bills],
+            [t('Average bill'), money(totals.avg_bill), totals.avg_bill, prev.avg_bill],
+            [t('Items sold'), totals.items_sold, totals.items_sold, prev.items_sold],
           ].map(([label, shown, cur, before]) => (
             <div key={label} className="db-tile db-click" role="link" tabIndex={0}
               onClick={() => billsLink(rangeParams)} onKeyDown={(ev) => { if (ev.key === 'Enter') billsLink(rangeParams) }}
@@ -421,7 +424,10 @@ export default function Dashboard() {
         </div>
 
         {totals.bills === 0 ? (
-          <EmptyNote>No sales in this period yet. Try a longer range, or <a onClick={() => navigate('/new-bill')} style={{ color: PRIMARY, fontWeight: 600 }}>create a bill</a>.</EmptyNote>
+          <EmptyNote>{(() => {
+            const [before, after] = t('No sales in this period yet. Try a longer range, or {link}.').split('{link}')
+            return <>{before}<a onClick={() => navigate('/new-bill')} style={{ color: PRIMARY, fontWeight: 600 }}>{t('create a bill')}</a>{after}</>
+          })()}</EmptyNote>
         ) : (
           <>
             <ResponsiveContainer width="100%" height={isMobile ? 200 : 260}>
@@ -435,14 +441,14 @@ export default function Dashboard() {
                   cursor={{ fill: 'rgba(47,102,144,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}
                   labelFormatter={(l) => data.range.granularity === 'month' ? dayjs(l + '-01').format('MMMM YYYY') : dayjs(l).format('ddd, D MMM')}
-                  formatter={(v, _n, item) => [`${money(v)} · ${item.payload.bills} bill${item.payload.bills === 1 ? '' : 's'}`, 'Sales']}
+                  formatter={(v, _n, item) => [`${money(v)} · ${t(item.payload.bills === 1 ? '{n} bill' : '{n} bills', { n: item.payload.bills })}`, t('Sales')]}
                 />
                 <Bar dataKey="revenue" fill={PRIMARY} radius={[4, 4, 0, 0]} maxBarSize={isMobile ? 22 : 36}
                   cursor="pointer" onClick={(bar) => openSeriesBucket(bar?.payload)} />
               </BarChart>
             </ResponsiveContainer>
             <div style={{ fontSize: 12, color: SUB, textAlign: 'center', marginTop: 4 }}>
-              Tap a bar to see the bills for that {data.range.granularity === 'month' ? 'month' : 'day'}
+              {data.range.granularity === 'month' ? t('Tap a bar to see the bills for that month') : t('Tap a bar to see the bills for that day')}
             </div>
           </>
         )}
@@ -450,8 +456,8 @@ export default function Dashboard() {
 
       {/* Category · Payment · Top sellers */}
       <div className="db-grid db-grid-3" style={{ marginBottom: 16 }}>
-        <Card title={<SectionTitle>Sales by category</SectionTitle>} style={{ borderRadius: 14 }}>
-          {data.by_category.length === 0 ? <EmptyNote>No category sales in this period</EmptyNote> : (
+        <Card title={<SectionTitle>{t('Sales by category')}</SectionTitle>} style={{ borderRadius: 14 }}>
+          {data.by_category.length === 0 ? <EmptyNote>{t('No category sales in this period')}</EmptyNote> : (
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexDirection: isMobile ? 'column' : 'row' }}>
               <div style={{ width: isMobile ? 170 : 160, height: isMobile ? 170 : 160, flexShrink: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -481,25 +487,25 @@ export default function Dashboard() {
           )}
         </Card>
 
-        <Card title={<SectionTitle>Payment modes</SectionTitle>} style={{ borderRadius: 14 }}>
-          {data.by_payment.length === 0 ? <EmptyNote>No payments in this period</EmptyNote> : (
+        <Card title={<SectionTitle>{t('Payment modes')}</SectionTitle>} style={{ borderRadius: 14 }}>
+          {data.by_payment.length === 0 ? <EmptyNote>{t('No payments in this period')}</EmptyNote> : (
             <>
               <div style={{ display: 'flex', height: 14, borderRadius: 7, overflow: 'hidden', marginBottom: 6 }}>
                 {data.by_payment.map((p, i) => (
-                  <AntTooltip key={p.payment_mode} title={`${p.payment_mode}: ${money(p.revenue)}`}>
+                  <AntTooltip key={p.payment_mode} title={`${t(p.payment_mode)}: ${money(p.revenue)}`}>
                     <div style={{ width: `${p.revenue / payTotal * 100}%`, background: PALETTE[i % PALETTE.length] }} />
                   </AntTooltip>
                 ))}
               </div>
               <div style={{ fontSize: 13, color: SUB, marginBottom: 8 }}>
-                {data.by_payment.map(p => `${p.payment_mode} ${Math.round(p.revenue / payTotal * 100)}%`).join(' · ')}
+                {data.by_payment.map(p => `${t(p.payment_mode)} ${Math.round(p.revenue / payTotal * 100)}%`).join(' · ')}
               </div>
               {data.by_payment.map((p, i) => (
                 <div key={p.payment_mode} className="db-row db-click" role="link" tabIndex={0}
                   onClick={() => billsLink({ ...rangeParams, payment_mode: p.payment_mode })}>
                   <span style={{ width: 10, height: 10, borderRadius: 3, background: PALETTE[i % PALETTE.length], flexShrink: 0 }} />
-                  <span style={{ flex: 1, color: TEXT, fontSize: 13.5 }}>{p.payment_mode}</span>
-                  <span style={{ color: SUB, fontSize: 12.5 }}>{p.bills} bill{p.bills === 1 ? '' : 's'}</span>
+                  <span style={{ flex: 1, color: TEXT, fontSize: 13.5 }}>{t(p.payment_mode)}</span>
+                  <span style={{ color: SUB, fontSize: 12.5 }}>{t(p.bills === 1 ? '{n} bill' : '{n} bills', { n: p.bills })}</span>
                   <span style={{ color: TEXT, fontSize: 13, fontWeight: 600, minWidth: 64, textAlign: 'right' }}>{compact(p.revenue)}</span>
                   <RightOutlined style={{ color: SUB, fontSize: 10 }} />
                 </div>
@@ -508,14 +514,14 @@ export default function Dashboard() {
           )}
         </Card>
 
-        <Card title={<SectionTitle>Top sellers</SectionTitle>} style={{ borderRadius: 14 }} styles={{ body: { paddingTop: 4 } }}>
+        <Card title={<SectionTitle>{t('Top sellers')}</SectionTitle>} style={{ borderRadius: 14 }} styles={{ body: { paddingTop: 4 } }}>
           <Tabs size="small" items={[
-            ['products', 'Products', data.top_products],
-            ['sizes', 'Sizes', data.top_sizes],
-            ['colors', 'Colours', data.top_colors],
+            ['products', t('Products'), data.top_products],
+            ['sizes', t('Sizes'), data.top_sizes],
+            ['colors', t('Colours'), data.top_colors],
           ].map(([key, label, rows]) => ({
             key, label,
-            children: rows.length === 0 ? <EmptyNote>No sales in this period</EmptyNote> : rows.map((r, i) => (
+            children: rows.length === 0 ? <EmptyNote>{t('No sales in this period')}</EmptyNote> : rows.map((r, i) => (
               <div key={r.name} className="db-row">
                 <span style={{ width: 20, color: SUB, fontSize: 12, fontWeight: 700 }}>{i + 1}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -524,7 +530,7 @@ export default function Dashboard() {
                     <div style={{ width: `${r.qty / rows[0].qty * 100}%`, height: '100%', borderRadius: 2, background: PALETTE[1] }} />
                   </div>
                 </div>
-                <span style={{ color: TEXT, fontSize: 13, fontWeight: 600, minWidth: 54, textAlign: 'right' }}>{r.qty} sold</span>
+                <span style={{ color: TEXT, fontSize: 13, fontWeight: 600, minWidth: 54, textAlign: 'right' }}>{t('{n} sold', { n: r.qty })}</span>
               </div>
             )),
           }))} />
@@ -534,12 +540,12 @@ export default function Dashboard() {
       {/* Recent bills + Low stock */}
       <div className="db-grid db-grid-2">
         <Card style={{ borderRadius: 14 }}
-          title={<SectionTitle extra={<a onClick={() => navigate('/bill-history')} style={{ fontSize: 13, color: PRIMARY, fontWeight: 600 }}>View all <RightOutlined style={{ fontSize: 10 }} /></a>}>Recent bills</SectionTitle>}>
+          title={<SectionTitle extra={<a onClick={() => navigate('/bill-history')} style={{ fontSize: 13, color: PRIMARY, fontWeight: 600 }}>{t('View all')} <RightOutlined style={{ fontSize: 10 }} /></a>}>{t('Recent bills')}</SectionTitle>}>
           {data.recent_bills.map(b => (
             <div key={b.bill_no} className="db-row">
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ color: TEXT, fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {b.customer_name || 'Walk-in'}
+                  {b.customer_name || t('Walk-in')}
                 </div>
                 <div style={{ color: SUB, fontSize: 12 }}>
                   {b.bill_no} · {dayjs(b.bill_date).isSame(today, 'day') ? b.bill_time : dayjs(b.bill_date).format('D MMM')}
@@ -548,24 +554,24 @@ export default function Dashboard() {
               <div style={{ textAlign: 'right' }}>
                 <div style={{ color: TEXT, fontSize: 13.5, fontWeight: 700 }}>{money(b.grand_total)}</div>
                 <Tag color={b.status === 'Paid' ? 'default' : b.status === 'Credit' ? 'orange' : 'red'} style={{ margin: 0, fontSize: 11 }}>
-                  {b.status === 'Paid' ? b.payment_mode : b.status}
+                  {b.status === 'Paid' ? t(b.payment_mode) : t(b.status)}
                 </Tag>
               </div>
-              <AntTooltip title="Reprint">
-                <Button size="small" icon={<PrinterOutlined />} onClick={() => reprint(b)} aria-label={`Reprint ${b.bill_no}`} />
+              <AntTooltip title={t('Reprint')}>
+                <Button size="small" icon={<PrinterOutlined />} onClick={() => reprint(b)} aria-label={t('Reprint {no}', { no: b.bill_no })} />
               </AntTooltip>
-              <AntTooltip title={b.phone ? 'Share on WhatsApp' : 'No phone number on this bill'}>
+              <AntTooltip title={b.phone ? t('Share on WhatsApp') : t('No phone number on this bill')}>
                 <Button size="small" icon={<WhatsAppOutlined />} disabled={!b.phone} onClick={() => shareWhatsApp(b)}
-                  aria-label={`Share ${b.bill_no} on WhatsApp`} style={b.phone ? { color: '#128C4B' } : undefined} />
+                  aria-label={t('Share {no} on WhatsApp', { no: b.bill_no })} style={b.phone ? { color: '#128C4B' } : undefined} />
               </AntTooltip>
             </div>
           ))}
         </Card>
 
         <Card style={{ borderRadius: 14 }}
-          title={<SectionTitle extra={counts.low_stock > 0 && <a onClick={() => navigate('/products?low=1')} style={{ fontSize: 13, color: PRIMARY, fontWeight: 600 }}>View all <RightOutlined style={{ fontSize: 10 }} /></a>}>Low stock</SectionTitle>}>
+          title={<SectionTitle extra={counts.low_stock > 0 && <a onClick={() => navigate('/products?low=1')} style={{ fontSize: 13, color: PRIMARY, fontWeight: 600 }}>{t('View all')} <RightOutlined style={{ fontSize: 10 }} /></a>}>{t('Low stock')}</SectionTitle>}>
           {data.low_stock.length === 0 ? (
-            <EmptyNote><CheckCircleFilled style={{ color: UP }} /> All products are well stocked</EmptyNote>
+            <EmptyNote><CheckCircleFilled style={{ color: UP }} /> {t('All products are well stocked')}</EmptyNote>
           ) : data.low_stock.slice(0, 8).map(p => {
             const out = p.stock_qty <= 0
             return (
@@ -577,17 +583,17 @@ export default function Dashboard() {
                   <div style={{ fontSize: 12, color: SUB }}>
                     {p.item_id} ·{' '}
                     <span style={{ color: out ? DOWN : '#B9770E', fontWeight: 700 }}>
-                      {out ? 'Out of stock' : `${p.stock_qty} left`}
-                    </span>{' '}(min {p.min_stock})
+                      {out ? t('Out of stock') : t('{n} left', { n: p.stock_qty })}
+                    </span>{' '}{t('(min {n})', { n: p.min_stock })}
                   </div>
                 </div>
                 {CAN_STOCK.has(role) && (
                   <>
                     <Button size="small" type={out ? 'primary' : 'default'} danger={out} onClick={() => { setRestock(p); setRestockQty(Math.max(p.min_stock * 2 - p.stock_qty, 1)) }}>
-                      Restock
+                      {t('Restock')}
                     </Button>
-                    <AntTooltip title="Edit product">
-                      <Button size="small" icon={<EditOutlined />} aria-label={`Edit ${p.product_name}`}
+                    <AntTooltip title={t('Edit product')}>
+                      <Button size="small" icon={<EditOutlined />} aria-label={t('Edit {name}', { name: p.product_name })}
                         onClick={() => navigate(`/products?search=${encodeURIComponent(p.item_id)}`)} />
                     </AntTooltip>
                   </>
@@ -599,20 +605,23 @@ export default function Dashboard() {
       </div>
 
       <Modal
-        title={restock ? `Restock ${restock.product_name}` : ''}
+        title={restock ? t('Restock {name}', { name: restock.product_name }) : ''}
         open={!!restock} onCancel={() => setRestock(null)} onOk={doRestock}
-        okText="Add stock" okButtonProps={{ style: { background: PRIMARY, borderColor: PRIMARY } }}
+        okText={t('Add stock')} okButtonProps={{ style: { background: PRIMARY, borderColor: PRIMARY } }}
       >
         {restock && (
           <>
             <p style={{ color: SUB }}>
-              {restock.item_id} · currently <b style={{ color: TEXT }}>{restock.stock_qty}</b> in stock (min {restock.min_stock})
+              {restock.item_id} · {(() => {
+                const [before, after] = t('currently {qty} in stock (min {min})', { min: restock.min_stock }).split('{qty}')
+                return <>{before}<b style={{ color: TEXT }}>{restock.stock_qty}</b>{after}</>
+              })()}
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span>Quantity to add</span>
+              <span>{t('Quantity to add')}</span>
               <InputNumber min={1} value={restockQty} onChange={setRestockQty} autoFocus />
             </div>
-            <p style={{ color: SUB, marginTop: 10, marginBottom: 0 }}>New stock: <b style={{ color: TEXT }}>{restock.stock_qty + (restockQty || 0)}</b></p>
+            <p style={{ color: SUB, marginTop: 10, marginBottom: 0 }}>{t('New stock:')} <b style={{ color: TEXT }}>{restock.stock_qty + (restockQty || 0)}</b></p>
           </>
         )}
       </Modal>

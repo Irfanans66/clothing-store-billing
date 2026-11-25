@@ -12,6 +12,7 @@ import dayjs from 'dayjs'
 import { getProducts, getStoreProfile, recordLabelPrint, getLabelPrints } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { useCurrency } from '../utils/currency'
+import { useT } from '../i18n'
 import {
   LABEL_SIZES, LAYOUTS, LABEL_DESIGNS, DEFAULT_FIELDS, A4_65, labelDims, renderLabel, buildPrintHtml,
 } from '../utils/labels'
@@ -52,6 +53,14 @@ const CSS = `
 @media (max-width: 767px) { .bl-fields { grid-template-columns: 1fr; } }
 `
 
+// Fill {placeholders} in an already-translated sentence with JSX (bold words, numbers)
+function rich(text, parts) {
+  return text.split(/(\{\w+\})/).map((s, i) => {
+    const m = s.match(/^\{(\w+)\}$/)
+    return m && m[1] in parts ? <React.Fragment key={i}>{parts[m[1]]}</React.Fragment> : s
+  })
+}
+
 function loadSettings() {
   try { return { ...defaults(), ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') } } catch { return defaults() }
 }
@@ -60,6 +69,7 @@ function defaults() {
 }
 
 export default function BarcodeLabels() {
+  const t = useT()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const screens = useBreakpoint()
@@ -130,11 +140,11 @@ export default function BarcodeLabels() {
   // ── Filtering ──────────────────────────────────────────────────────────────
   const q = search.trim().toLowerCase()
   const CHIPS = [
-    ['all', 'All', () => true],
-    ['instock', 'In stock', (p) => (p.stock_qty || 0) > 0],
-    ['new', `New stock (${NEW_STOCK_DAYS} days)`, (p) => p.created_at && today.diff(dayjs(p.created_at), 'day') <= NEW_STOCK_DAYS],
-    ['never', 'Never printed', (p) => !p.last_label_printed],
-    ['selected', `Selected (${selected.length})`, (p) => selected.includes(p.item_id)],
+    ['all', t('All'), () => true],
+    ['instock', t('In stock'), (p) => (p.stock_qty || 0) > 0],
+    ['new', t('New stock ({n} days)', { n: NEW_STOCK_DAYS }), (p) => p.created_at && today.diff(dayjs(p.created_at), 'day') <= NEW_STOCK_DAYS],
+    ['never', t('Never printed'), (p) => !p.last_label_printed],
+    ['selected', t('Selected ({n})', { n: selected.length }), (p) => selected.includes(p.item_id)],
   ]
   const chipFn = CHIPS.find(([k]) => k === chip)?.[2] || (() => true)
   const shown = products.filter((p) => chipFn(p)
@@ -161,8 +171,8 @@ export default function BarcodeLabels() {
   async function print(jobs, { test = false } = {}) {
     if (!jobs.length) return
     const win = window.open('', '_blank', 'width=700,height=600')   // open first so pop-up blockers allow it
-    if (!win) { message.error('Allow pop-ups for this site to print labels'); return }
-    win.document.write('<p style="font-family:sans-serif;padding:16px">Preparing labels…</p>')
+    if (!win) { message.error(t('Allow pop-ups for this site to print labels')); return }
+    win.document.write('<p style="font-family:sans-serif;padding:16px">' + t('Preparing labels…') + '</p>')
     setPrinting(true)
     try {
       const html = buildPrintHtml(jobs, {
@@ -185,7 +195,7 @@ export default function BarcodeLabels() {
       }
     } catch (err) {
       win.close()
-      message.error('Could not prepare labels: ' + err.message)
+      message.error(t('Could not prepare labels: {error}', { error: err.message }))
     } finally { setPrinting(false) }
   }
   const printSelected = () => print(selected.filter((id) => byId[id]).map((id) => ({ product: byId[id], copies: copiesFor(id) || 1 })))
@@ -200,14 +210,14 @@ export default function BarcodeLabels() {
   // ── UI ─────────────────────────────────────────────────────────────────────
   const money = (v) => `${sym}${Math.round(Number(v) || 0).toLocaleString('en-IN')}`
   const stockTag = (p) => ((p.stock_qty || 0) <= 0
-    ? <Tag color="red" style={{ margin: 0 }}>0 stock</Tag>
+    ? <Tag color="red" style={{ margin: 0 }}>{t('0 stock')}</Tag>
     : <span style={{ color: TEXT }}>{p.stock_qty}</span>)
   const priceCell = (p) => (
     <div style={{ whiteSpace: 'nowrap' }}>
-      <span style={{ color: TEXT, fontWeight: 600 }}>MRP {money(p.mrp)}</span>
+      <span style={{ color: TEXT, fontWeight: 600 }}>{t('MRP {price}', { price: money(p.mrp) })}</span>
       {p.selling_price < p.mrp && (
-        <Tooltip title="The label shows MRP; New Bill charges the selling price. Turn on “Offer price” to print both.">
-          <div style={{ fontSize: 12, color: SUB }}>Sells at {money(p.selling_price)}</div>
+        <Tooltip title={t('The label shows MRP; New Bill charges the selling price. Turn on “Offer price” to print both.')}>
+          <div style={{ fontSize: 12, color: SUB }}>{t('Sells at {price}', { price: money(p.selling_price) })}</div>
         </Tooltip>
       )}
     </div>
@@ -215,7 +225,7 @@ export default function BarcodeLabels() {
 
   const columns = [
     {
-      title: 'Product', dataIndex: 'product_name', key: 'name',
+      title: t('Product'), dataIndex: 'product_name', key: 'name',
       render: (v, p) => (
         <div>
           <div style={{ color: TEXT, fontWeight: 600 }}>{v}</div>
@@ -223,20 +233,20 @@ export default function BarcodeLabels() {
         </div>
       ),
     },
-    { title: 'Price', key: 'price', width: 130, render: (_, p) => priceCell(p) },
-    { title: 'Barcode', dataIndex: 'barcode', key: 'barcode', width: 170, render: (v, p) => <span className="bl-code">{v || p.item_id}</span> },
-    { title: 'Stock', dataIndex: 'stock_qty', key: 'stock', width: 80, align: 'right', render: (_, p) => stockTag(p) },
+    { title: t('Price'), key: 'price', width: 130, render: (_, p) => priceCell(p) },
+    { title: t('Barcode'), dataIndex: 'barcode', key: 'barcode', width: 170, render: (v, p) => <span className="bl-code">{v || p.item_id}</span> },
+    { title: t('Stock'), dataIndex: 'stock_qty', key: 'stock', width: 80, align: 'right', render: (_, p) => stockTag(p) },
     {
-      title: 'Last printed', dataIndex: 'last_label_printed', key: 'printed', width: 110,
-      render: (v) => <span style={{ color: v ? TEXT : SUB }}>{v ? dayjs(v).format('D MMM') : 'Never'}</span>,
+      title: t('Last printed'), dataIndex: 'last_label_printed', key: 'printed', width: 110,
+      render: (v) => <span style={{ color: v ? TEXT : SUB }}>{v ? dayjs(v).format('D MMM') : t('Never')}</span>,
     },
     {
-      title: 'Copies', key: 'copies', width: 96,
+      title: t('Copies'), key: 'copies', width: 96,
       render: (_, p) => (
         <span onClick={(e) => e.stopPropagation()}>
           <InputNumber size="small" min={1} max={1000} style={{ width: 72 }} disabled={!selected.includes(p.item_id)}
             value={selected.includes(p.item_id) ? copiesFor(p.item_id) : null}
-            onChange={(v) => setCopies((c) => ({ ...c, [p.item_id]: v || 1 }))} aria-label={`Copies of ${p.product_name}`} />
+            onChange={(v) => setCopies((c) => ({ ...c, [p.item_id]: v || 1 }))} aria-label={t('Copies of {name}', { name: p.product_name })} />
         </span>
       ),
     },
@@ -246,68 +256,68 @@ export default function BarcodeLabels() {
     <Card style={{ borderRadius: 14, marginBottom: 14 }} styles={{ body: { padding: isMobile ? 12 : 16 } }}
       title={isMobile
         ? <a onClick={() => setSettingsOpen((o) => !o)} style={{ color: TEXT }} aria-expanded={settingsOpen}>
-            Label settings <span style={{ color: SUB, fontWeight: 400, fontSize: 12.5 }}>{settingsOpen ? '▲' : '▼ change size, design…'}</span>
+            {t('Label settings')} <span style={{ color: SUB, fontWeight: 400, fontSize: 12.5 }}>{settingsOpen ? '▲' : '▼ ' + t('change size, design…')}</span>
           </a>
-        : <span style={{ color: TEXT }}>Label settings</span>}
-      extra={<a onClick={() => setHelpOpen(true)} style={{ color: PRIMARY, fontSize: 13 }}><QuestionCircleOutlined /> {isMobile ? 'Help' : 'Printer setup help'}</a>}>
+        : <span style={{ color: TEXT }}>{t('Label settings')}</span>}
+      extra={<a onClick={() => setHelpOpen(true)} style={{ color: PRIMARY, fontSize: 13 }}><QuestionCircleOutlined /> {isMobile ? t('Help') : t('Printer setup help')}</a>}>
       {(!isMobile || settingsOpen) && <>
       <div className="bl-fields">
         <div className="bl-field">
-          <label htmlFor="bl-layout">Paper</label>
-          <Select id="bl-layout" value={settings.layout} onChange={(v) => set({ layout: v })} options={LAYOUTS} style={{ width: '100%' }} popupMatchSelectWidth={false} />
+          <label htmlFor="bl-layout">{t('Paper')}</label>
+          <Select id="bl-layout" value={settings.layout} onChange={(v) => set({ layout: v })} options={LAYOUTS.map((o) => ({ ...o, label: t(o.label) }))} style={{ width: '100%' }} popupMatchSelectWidth={false} />
         </div>
         <div className="bl-field">
-          <label htmlFor="bl-size">Label size</label>
+          <label htmlFor="bl-size">{t('Label size')}</label>
           <Select id="bl-size" value={settings.layout === 'a4-65' ? 'a4' : settings.size} onChange={(v) => set({ size: v })}
             disabled={settings.layout === 'a4-65'} style={{ width: '100%' }} popupMatchSelectWidth={false}
-            options={settings.layout === 'a4-65' ? [{ value: 'a4', label: '38.1 × 21.2 mm (fixed by sheet)' }] : LABEL_SIZES} />
+            options={settings.layout === 'a4-65' ? [{ value: 'a4', label: t('38.1 × 21.2 mm (fixed by sheet)') }] : LABEL_SIZES.map((o) => ({ ...o, label: t(o.label) }))} />
         </div>
         <div className="bl-field">
-          <label htmlFor="bl-design">Design</label>
-          <Select id="bl-design" value={settings.design} onChange={(v) => set({ design: v })} options={LABEL_DESIGNS} style={{ width: '100%' }} popupMatchSelectWidth={false} />
+          <label htmlFor="bl-design">{t('Design')}</label>
+          <Select id="bl-design" value={settings.design} onChange={(v) => set({ design: v })} options={LABEL_DESIGNS.map((o) => ({ ...o, label: t(o.label) }))} style={{ width: '100%' }} popupMatchSelectWidth={false} />
         </div>
         {settings.layout === 'a4-65' ? (
           <div className="bl-field">
-            <label htmlFor="bl-start">Start at label no.</label>
+            <label htmlFor="bl-start">{t('Start at label no.')}</label>
             <InputNumber id="bl-start" min={1} max={perSheet} value={startPos} onChange={(v) => setStartPos(v || 1)} style={{ width: '100%' }} />
-            <div style={{ fontSize: 12, color: SUB, marginTop: 2 }}>Skip labels already used on a half-used sheet (1–{perSheet}, left to right).</div>
+            <div style={{ fontSize: 12, color: SUB, marginTop: 2 }}>{t('Skip labels already used on a half-used sheet (1–{n}, left to right).', { n: perSheet })}</div>
           </div>
         ) : settings.layout === 'roll' && wMm > hMm ? (
           <div className="bl-field">
-            <label htmlFor="bl-rotate">Turn sideways for printer</label>
+            <label htmlFor="bl-rotate">{t('Turn sideways for printer')}</label>
             <Switch id="bl-rotate" checked={settings.rotate} onChange={(v) => set({ rotate: v })} />
-            <div style={{ fontSize: 12, color: SUB, marginTop: 2 }}>Keep on for printers that feed labels sideways (e.g. Zenpert).</div>
+            <div style={{ fontSize: 12, color: SUB, marginTop: 2 }}>{t('Keep on for printers that feed labels sideways (e.g. Zenpert).')}</div>
           </div>
         ) : <div />}
       </div>
       <div className="bl-field" style={{ marginTop: 12 }}>
-        <label>Show on label</label>
+        <label>{t('Show on label')}</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
           {FIELD_LABELS.map(([k, l]) => (
-            <Checkbox key={k} checked={settings.fields[k]} onChange={(e) => set({ fields: { ...settings.fields, [k]: e.target.checked } })}>{l}</Checkbox>
+            <Checkbox key={k} checked={settings.fields[k]} onChange={(e) => set({ fields: { ...settings.fields, [k]: e.target.checked } })}>{t(l)}</Checkbox>
           ))}
         </div>
       </div>
-      <div style={{ fontSize: 12, color: SUB, marginTop: 8 }}>Prints in pure black & white for sharp thermal labels. Your choices are remembered on this device.</div>
+      <div style={{ fontSize: 12, color: SUB, marginTop: 8 }}>{t('Prints in pure black & white for sharp thermal labels. Your choices are remembered on this device.')}</div>
       </>}
     </Card>
   )
 
   const previewCard = (
     <Card style={{ borderRadius: 14, marginBottom: 14 }} styles={{ body: { padding: isMobile ? 12 : 16 } }}
-      title={<span style={{ color: TEXT }}>Preview</span>}>
+      title={<span style={{ color: TEXT }}>{t('Preview')}</span>}>
       <div className="bl-preview">
-        {previewSrc ? <img src={previewSrc} alt={`Label preview for ${previewProduct.product_name}`} /> : <Spin />}
+        {previewSrc ? <img src={previewSrc} alt={t('Label preview for {name}', { name: previewProduct.product_name })} /> : <Spin />}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
         <Select value={previewProduct.item_id} onChange={setPreviewId} style={{ flex: 1, minWidth: 180 }} showSearch optionFilterProp="label"
           options={(products.length ? products : [SAMPLE]).map((p) => ({ value: p.item_id, label: `${p.product_name}${p.size ? ` · ${p.size}` : ''}` }))}
-          aria-label="Product to preview" />
-        <Tooltip title="Print one label of this product to check alignment">
-          <Button icon={<ExperimentOutlined />} onClick={testPrint}>Test print</Button>
+          aria-label={t('Product to preview')} />
+        <Tooltip title={t('Print one label of this product to check alignment')}>
+          <Button icon={<ExperimentOutlined />} onClick={testPrint}>{t('Test print')}</Button>
         </Tooltip>
       </div>
-      <div style={{ fontSize: 12, color: SUB, marginTop: 6 }}>{wMm} × {hMm} mm · {LABEL_DESIGNS.find((d) => d.value === settings.design)?.label}</div>
+      <div style={{ fontSize: 12, color: SUB, marginTop: 6 }}>{wMm} × {hMm} mm · {t(LABEL_DESIGNS.find((d) => d.value === settings.design)?.label || '')}</div>
     </Card>
   )
 
@@ -317,14 +327,14 @@ export default function BarcodeLabels() {
       background: 'var(--bg)', boxShadow: 'var(--neu-sm)', marginBottom: 14,
     }}>
       <div style={{ marginRight: 'auto', color: TEXT }}>
-        <b>{selected.length}</b> product{selected.length === 1 ? '' : 's'} · <b>{totalLabels}</b> label{totalLabels === 1 ? '' : 's'}
-        {settings.layout === 'a4-65' && totalLabels > 0 && <span style={{ color: SUB }}> · {Math.ceil((startPos - 1 + totalLabels) / perSheet)} sheet(s)</span>}
+        {rich(t(selected.length === 1 ? '{n} product' : '{n} products'), { n: <b>{selected.length}</b> })} · {rich(t(totalLabels === 1 ? '{n} label' : '{n} labels'), { n: <b>{totalLabels}</b> })}
+        {settings.layout === 'a4-65' && totalLabels > 0 && <span style={{ color: SUB }}> · {t('{n} sheet(s)', { n: Math.ceil((startPos - 1 + totalLabels) / perSheet) })}</span>}
       </div>
-      <span style={{ fontSize: 13, color: SUB }}>Copies each</span>
-      <InputNumber size="small" min={1} max={1000} value={defaultCopies} onChange={setAllCopies} style={{ width: 70 }} aria-label="Copies for every selected product" />
-      <Button size="small" onClick={copiesEqualStock} disabled={!selected.length}>Copies = stock</Button>
+      <span style={{ fontSize: 13, color: SUB }}>{t('Copies each')}</span>
+      <InputNumber size="small" min={1} max={1000} value={defaultCopies} onChange={setAllCopies} style={{ width: 70 }} aria-label={t('Copies for every selected product')} />
+      <Button size="small" onClick={copiesEqualStock} disabled={!selected.length}>{t('Copies = stock')}</Button>
       <Button type="primary" icon={<PrinterOutlined />} disabled={!selected.length} loading={printing} onClick={printSelected}>
-        Print {totalLabels || ''} label{totalLabels === 1 ? '' : 's'}
+        {t(totalLabels === 1 ? 'Print {n} label' : totalLabels ? 'Print {n} labels' : 'Print labels', { n: totalLabels })}
       </Button>
     </div>
   )
@@ -332,9 +342,9 @@ export default function BarcodeLabels() {
   const listCard = (
     <Card style={{ borderRadius: 14 }} styles={{ body: { padding: isMobile ? 10 : 12 } }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-        <Input placeholder="Search name, ID, barcode, size" prefix={<SearchOutlined />} allowClear
+        <Input placeholder={t('Search name, ID, barcode, size')} prefix={<SearchOutlined />} allowClear
           value={search} onChange={(e) => setSearch(e.target.value)} style={{ flex: 2, minWidth: 0 }} />
-        <Select placeholder="All categories" allowClear value={category || undefined} onChange={(v) => setCategory(v || '')}
+        <Select placeholder={t('All categories')} allowClear value={category || undefined} onChange={(v) => setCategory(v || '')}
           options={CATEGORIES.map((c) => ({ value: c, label: c }))} style={{ flex: 1, minWidth: isMobile ? '100%' : 150 }} />
       </div>
       <div className="bl-chips" style={{ marginBottom: 8 }}>
@@ -344,26 +354,26 @@ export default function BarcodeLabels() {
       </div>
       {isMobile ? (
         loading ? <div style={{ textAlign: 'center', padding: 30 }}><Spin /></div>
-          : shown.length === 0 ? <Empty description="No products match" />
+          : shown.length === 0 ? <Empty description={t('No products match')} />
             : shown.map((p) => {
               const on = selected.includes(p.item_id)
               const out = (p.stock_qty || 0) <= 0
               return (
                 <div key={p.item_id} className="bl-card" style={{ opacity: out && !on ? 0.65 : 1 }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <Checkbox checked={on} onChange={(e) => toggle(p.item_id, e.target.checked)} style={{ marginTop: 3 }} aria-label={`Select ${p.product_name}`} />
+                    <Checkbox checked={on} onChange={(e) => toggle(p.item_id, e.target.checked)} style={{ marginTop: 3 }} aria-label={t('Select {name}', { name: p.product_name })} />
                     <div style={{ flex: 1, minWidth: 0 }} onClick={() => toggle(p.item_id, !on)} role="button" tabIndex={-1}>
                       <div style={{ color: TEXT, fontWeight: 600 }}>{p.product_name}</div>
                       <div style={{ fontSize: 12.5, color: SUB }}>{[p.size, p.color, p.category].filter(Boolean).join(' · ')}</div>
                       <div className="bl-code" style={{ marginTop: 2 }}>{p.barcode || p.item_id}</div>
                       <div style={{ display: 'flex', gap: 12, fontSize: 13, marginTop: 4 }}>
-                        <span>MRP <b style={{ color: TEXT }}>{money(p.mrp)}</b></span>
-                        <span>{out ? <span style={{ color: BAD, fontWeight: 600 }}>0 stock</span> : <>Stock <b style={{ color: TEXT }}>{p.stock_qty}</b></>}</span>
+                        <span>{rich(t('MRP {price}'), { price: <b style={{ color: TEXT }}>{money(p.mrp)}</b> })}</span>
+                        <span>{out ? <span style={{ color: BAD, fontWeight: 600 }}>{t('0 stock')}</span> : <>{t('Stock')} <b style={{ color: TEXT }}>{p.stock_qty}</b></>}</span>
                       </div>
                     </div>
                     {on && (
                       <InputNumber size="small" min={1} max={1000} style={{ width: 64 }} value={copiesFor(p.item_id)}
-                        onChange={(v) => setCopies((c) => ({ ...c, [p.item_id]: v || 1 }))} aria-label={`Copies of ${p.product_name}`} />
+                        onChange={(v) => setCopies((c) => ({ ...c, [p.item_id]: v || 1 }))} aria-label={t('Copies of {name}', { name: p.product_name })} />
                     )}
                   </div>
                 </div>
@@ -376,7 +386,7 @@ export default function BarcodeLabels() {
           rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys), preserveSelectedRowKeys: true }}
           onRow={(p) => ({ onClick: () => { toggle(p.item_id, !selected.includes(p.item_id)) }, style: { cursor: 'pointer' } })}
           rowClassName={(p) => ((p.stock_qty || 0) <= 0 ? 'bl-out' : '')}
-          locale={{ emptyText: 'No products match' }}
+          locale={{ emptyText: t('No products match') }}
         />
       )}
     </Card>
@@ -386,11 +396,11 @@ export default function BarcodeLabels() {
     <div style={{ paddingBottom: isMobile ? 120 : 0 }}>
       <style>{CSS}</style>
       <a onClick={() => navigate('/products')} style={{ color: PRIMARY, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <ArrowLeftOutlined /> Products
+        <ArrowLeftOutlined /> {t('Products')}
       </a>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-        <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: TEXT }}>Barcode labels</Title>
-        <Button icon={<HistoryOutlined />} onClick={openHistory}>{isMobile ? '' : 'Print history'}</Button>
+        <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: TEXT }}>{t('Barcode labels')}</Title>
+        <Button icon={<HistoryOutlined />} onClick={openHistory}>{isMobile ? '' : t('Print history')}</Button>
       </div>
 
       {isMobile ? (
@@ -413,25 +423,25 @@ export default function BarcodeLabels() {
         </div>
       )}
 
-      <Modal title="Printer setup" open={helpOpen} onCancel={() => setHelpOpen(false)} footer={null} width={520}>
+      <Modal title={t('Printer setup')} open={helpOpen} onCancel={() => setHelpOpen(false)} footer={null} width={520}>
         <ol style={{ paddingLeft: 18, color: TEXT, lineHeight: 1.7 }}>
-          <li>Click <b>Test print</b> first — it prints one label so you can check alignment.</li>
-          <li>In the print window, choose your label printer (for example Zenpert, TSC or Xprinter).</li>
-          <li>Set the paper size to your label size ({wMm} × {hMm} mm), or A4 for sheets.</li>
-          <li>Set <b>Scale</b> to “Actual size” / 100% and <b>Margins</b> to None.</li>
-          <li>If labels come out sideways, switch “Turn sideways for printer” off (roll printers only).</li>
-          <li>Most browsers remember these choices for next time.</li>
+          <li>{rich(t('Click {testPrint} first — it prints one label so you can check alignment.'), { testPrint: <b>{t('Test print')}</b> })}</li>
+          <li>{t('In the print window, choose your label printer (for example Zenpert, TSC or Xprinter).')}</li>
+          <li>{t('Set the paper size to your label size ({w} × {h} mm), or A4 for sheets.', { w: wMm, h: hMm })}</li>
+          <li>{rich(t('Set {scale} to “Actual size” / 100% and {margins} to None.'), { scale: <b>{t('Scale')}</b>, margins: <b>{t('Margins')}</b> })}</li>
+          <li>{t('If labels come out sideways, switch “Turn sideways for printer” off (roll printers only).')}</li>
+          <li>{t('Most browsers remember these choices for next time.')}</li>
         </ol>
-        <Text style={{ color: SUB }}>Thermal printers print black only, so designs here use no colour.</Text>
+        <Text style={{ color: SUB }}>{t('Thermal printers print black only, so designs here use no colour.')}</Text>
       </Modal>
 
-      <Modal title="Print history" open={historyOpen} onCancel={() => setHistoryOpen(false)} footer={null} width={560}>
+      <Modal title={t('Print history')} open={historyOpen} onCancel={() => setHistoryOpen(false)} footer={null} width={560}>
         {history === null ? <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
-          : history.length === 0 ? <Empty description="No labels printed yet" />
+          : history.length === 0 ? <Empty description={t('No labels printed yet')} />
           : history.map((h) => (
             <div key={h.id} style={{ padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <b style={{ color: TEXT }}>{h.total_labels} labels</b>
+                <b style={{ color: TEXT }}>{t('{n} labels', { n: h.total_labels })}</b>
                 <span style={{ color: SUB, fontSize: 12.5 }}>{dayjs(h.printed_at).format('D MMM YYYY, h:mm A')} · {h.printed_by}</span>
               </div>
               <div style={{ fontSize: 12.5, color: SUB }}>

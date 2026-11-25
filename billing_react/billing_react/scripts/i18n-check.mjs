@@ -23,6 +23,18 @@ const INDIRECT = [
   'Discount', 'Points redeemed', 'Tax', 'Payment', 'Change given', 'Balance due', '{n} items', '{n} item', 'Pay later', 'Later',
   'Enter a valid 10-digit mobile number', 'Enter a valid phone number',
   'Printer is off or too far. Turn it on, bring it close and tap Retry.',
+  // Later screens: periods, categories, label sizes/designs, ticket topics, statuses, export headers, tiers
+  'Today', '7 days', '30 days', 'This year', 'Custom', 'vs yesterday', 'vs previous 7 days', 'vs previous 30 days',
+  'vs previous period', 'Shirts', 'T-Shirts', 'Jeans', 'Trousers', 'Kurtis', 'Sarees', 'Lehenga', 'Jackets',
+  'Sweaters', 'Suits', 'Kids Wear', 'Accessories', 'Other', 'Store name', 'Size', 'Colour', 'Category',
+  'Offer price (MRP struck through)', '“Incl. of all taxes”', 'Label roll — 1 across', 'Label roll — 2 across',
+  'A4 sheet — 65 labels (38.1 × 21.2 mm)', '50 × 25 mm (standard)', '50 × 30 mm', '38 × 25 mm (small)', '40 × 30 mm',
+  '50.8 × 24.9 mm', '60 × 40 mm (large)', '100 × 50 mm (XL)', '25 × 50 mm (portrait)', 'Design 1 — Classic',
+  'Design 2 — Size panel', 'Design 3 — Bold price', 'Design 4 — Size first', 'Billing', 'Printing', 'Payments',
+  'Account', 'Open', 'In Progress', 'Resolved', 'Yesterday', 'This week', 'This month', 'Last month', 'All',
+  'Cancelled', 'Credit (due)', 'Void', 'Returned', 'Partial Return', 'Time', 'Billed by', 'Status', 'Total', 'Due',
+  'Cancel reason', 'Store Credit', 'Regular', 'Silver', 'Gold', 'Platinum', '10% off',
+  'Tiers upgrade automatically: Silver from ₹10,000 spent, Gold from ₹25,000, Platinum from ₹50,000.',
 ]
 
 function walk(dir) {
@@ -34,9 +46,14 @@ function walk(dir) {
 }
 
 const keys = new Set(INDIRECT)
+const ternary = /\b(?:t|translate)\(\s*[^'"`()\n]*(?:\([^()\n]*\)[^'"`()\n]*)*\?\s*'((?:[^'\\]|\\.)*)'\s*:\s*'((?:[^'\\]|\\.)*)'/g
 const re = /\b(?:t|translate)\(\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g
 for (const f of walk(SRC)) {
-  for (const m of fs.readFileSync(f, 'utf8').matchAll(re)) keys.add((m[1] ?? m[2]).replace(/\\'/g, "'"))
+  const src = fs.readFileSync(f, 'utf8')
+  const unq = (k) => k.replace(/\\(.)/g, (_, c) => (c === 'n' ? '\n' : c))
+  for (const m of src.matchAll(re)) keys.add(unq(m[1] ?? m[2]))
+  // t(n === 1 ? 'One {n} bill' : '{n} bills', …): both branches are keys
+  for (const m of src.matchAll(ternary)) { keys.add(unq(m[1])); keys.add(unq(m[2])) }
 }
 
 const only = process.argv[2]
