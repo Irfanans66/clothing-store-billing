@@ -61,6 +61,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
                 role="Admin",
                 store_code=store.store_code,
                 store_name=store.store_name,
+                language=store.language or "en",
             )
 
     # 3. Store sub-user (search across all stores)
@@ -83,6 +84,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             role=user.role,
             store_code=user.store_code,
             store_name=parent.store_name if parent else "",
+            language=(parent.language if parent else None) or "en",
         )
 
     raise HTTPException(
@@ -137,6 +139,7 @@ def register_store(payload: StoreRegisterRequest, db: Session = Depends(get_db))
         address=payload.address,
         gstin=payload.gstin or "",
         country=payload.country or "India",
+        language=payload.language or "en",
     )
     db.add(new_store)
     db.commit()

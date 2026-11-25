@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import { ConfigProvider } from 'antd'
 import App from './App.jsx'
 import './index.css'
+import { useLangStore } from './i18n'
+
+useLangStore.getState().restore()
 
 createRoot(document.getElementById('root')).render(
   <ConfigProvider

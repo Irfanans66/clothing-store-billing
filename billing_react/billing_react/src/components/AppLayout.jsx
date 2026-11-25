@@ -11,6 +11,7 @@ import { useAuthStore } from '../store/authStore'
 import { getStoreProfile } from '../api/client'
 import OfflineBanner from './OfflineBanner'
 import PaymentMonitor from './PaymentMonitor'
+import { useT, useLangStore } from '../i18n'
 
 const { Sider, Header, Content } = Layout
 const { Text } = Typography
@@ -120,7 +121,7 @@ function NavMenu({ menuItems, selectedKey, onSelect }) {
 function CollapsedNav({ menuItems, selectedKey, onSelect }) {
   return (
     <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 6px' }}>
-      {menuItems.map(({ key, icon, label }) => {
+      {menuItems.map(({ key, icon, label, short }) => {
         const active = selectedKey === key
         return (
           <button
@@ -137,7 +138,7 @@ function CollapsedNav({ menuItems, selectedKey, onSelect }) {
           >
             <span style={{ fontSize: 18, lineHeight: 1 }}>{icon}</span>
             <span style={{ fontSize: 10.5, fontWeight: active ? 700 : 500, lineHeight: 1.2, textAlign: 'center' }}>
-              {label.replace(' & Support', '')}
+              {short || label}
             </span>
           </button>
         )
@@ -183,13 +184,14 @@ function BrandHeader({ collapsed, storeName }) {
 
 // ── Mobile: fixed glass top header ─────────────────────────────────────────
 function MobileTopHeader({ storeName, role, username, onProfileAction }) {
+  const t = useT()
   const profileMenu = {
     items: [
-      { key: 'settings', icon: <SettingOutlined />,       label: 'Settings' },
-      { key: 'help',     icon: <QuestionCircleOutlined />, label: 'Help & Support' },
-      { key: 'team',     icon: <TeamOutlined />,           label: 'Team' },
+      { key: 'settings', icon: <SettingOutlined />,       label: t('Settings') },
+      { key: 'help',     icon: <QuestionCircleOutlined />, label: t('Help & Support') },
+      { key: 'team',     icon: <TeamOutlined />,           label: t('Team') },
       { type: 'divider' },
-      { key: 'logout',   icon: <LogoutOutlined />,         label: 'Logout', danger: true },
+      { key: 'logout',   icon: <LogoutOutlined />,         label: t('Logout'), danger: true },
     ],
     onClick: ({ key }) => onProfileAction(key),
   }
@@ -212,7 +214,7 @@ function MobileTopHeader({ storeName, role, username, onProfileAction }) {
               {username}
             </div>
             <Tag color={ROLE_COLORS[role] || 'default'} style={{ margin: 0, fontSize: 9, padding: '0 5px', lineHeight: '15px' }}>
-              {role}
+              {t(role)}
             </Tag>
           </div>
         </div>
@@ -239,8 +241,9 @@ function MobileTopHeader({ storeName, role, username, onProfileAction }) {
 
 // ── Mobile: fixed glass bottom navigation bar ───────────────────────────────
 function MobileBottomNav({ tabs, currentPath, onNavigate, canBill }) {
+  const t = useT()
   const all = canBill
-    ? [...tabs.slice(0, 2), { key: '/new-bill', Icon: PlusOutlined, label: 'New Bill', primary: true }, ...tabs.slice(2)]
+    ? [...tabs.slice(0, 2), { key: '/new-bill', Icon: PlusOutlined, label: t('New Bill'), primary: true }, ...tabs.slice(2)]
     : tabs
   return (
     <div className="mobile-bottom-nav">
@@ -280,7 +283,11 @@ export default function AppLayout() {
   useEffect(() => {
     if (role && role !== 'SuperAdmin') {
       getStoreProfile()
-        .then(p => { if (p?.country) setAuth({ country: p.country }) })
+        .then(p => {
+          if (p?.country) setAuth({ country: p.country })
+          // The shop's language wins, so a change made on one device reaches every device
+          if (p?.language && p.language !== useLangStore.getState().lang) useLangStore.getState().setLang(p.language)
+        })
         .catch(() => {})
     }
   }, [role])
@@ -288,13 +295,15 @@ export default function AppLayout() {
   const screens  = useBreakpoint()
   const isMobile = !screens.md   // true when < 768 px
 
-  const menuItems  = ROLE_MENUS[role]   || ROLE_MENUS.Viewer
-  const mobileTabs = MOBILE_TABS[role]  || MOBILE_TABS.Viewer
+  const t = useT()
+  const menuItems  = (ROLE_MENUS[role] || ROLE_MENUS.Viewer)
+    .map((i) => ({ ...i, label: t(i.label), short: t(i.label.replace(' & Support', '')) }))
+  const mobileTabs = (MOBILE_TABS[role] || MOBILE_TABS.Viewer).map((i) => ({ ...i, label: t(i.label) }))
   const path       = location.pathname
   const canBill    = CAN_CREATE_BILL.has(role)
 
   const desktopUserMenu = {
-    items: [{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', danger: true }],
+    items: [{ key: 'logout', icon: <LogoutOutlined />, label: t('Logout'), danger: true }],
     onClick: ({ key }) => { if (key === 'logout') { logout(); navigate('/login') } },
   }
 
@@ -335,7 +344,7 @@ export default function AppLayout() {
               {storeName && (
                 <Text style={{ fontSize: 13, color: '#5F5853' }}>{storeName}</Text>
               )}
-              {role !== 'SuperAdmin' && <Tag color="blue" style={{ margin: 0, boxShadow: '2px 2px 6px rgba(163,155,140,0.4), -2px -2px 6px rgba(255,255,255,0.9)', border: 'none' }}>{role}</Tag>}
+              {role !== 'SuperAdmin' && <Tag color="blue" style={{ margin: 0, boxShadow: '2px 2px 6px rgba(163,155,140,0.4), -2px -2px 6px rgba(255,255,255,0.9)', border: 'none' }}>{t(role)}</Tag>}
               <Dropdown menu={desktopUserMenu} trigger={['click']}>
                 <Space style={{ cursor: 'pointer' }}>
                   <Avatar style={{

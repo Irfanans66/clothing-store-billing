@@ -5,12 +5,17 @@ every line is measured and wrapped, divider lines sit in the gap *between* rows,
 boxes are sized to their contents, and the page height fits the content.
 
 Fonts: DejaVu Sans / Sans Mono (bundled, free licence) — they include the ₹ sign.
+Indian scripts (Hindi, Marathi, Bengali, Punjabi, Gujarati, Tamil, Telugu, Kannada,
+Malayalam) are drawn in Noto Sans and shaped with HarfBuzz (uharfbuzz), so matras and
+conjuncts join correctly; everything else stays in DejaVu. Labels follow the shop's
+language (see receipt_i18n.py); names the shop typed print exactly as typed.
 """
 from __future__ import annotations
 
 import base64
 import datetime
 import io
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable, Optional
@@ -18,7 +23,13 @@ from urllib.parse import quote
 
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import ttfonts as _ttfonts
+
+from app.services.receipt_i18n import T, T_mode, set_language, reset_language
+from reportlab.pdfbase.ttfonts import TTFont, shapeStr, ShapedStr
+
+# HarfBuzz shaping for Hindi; without it Hindi still prints, just with unjoined conjuncts
+_CAN_SHAPE = getattr(_ttfonts, "uharfbuzz", None) is not None
 from reportlab.pdfgen import canvas as rl_canvas
 
 DEFAULT_FOOTER = "Thank you! Visit again"
@@ -36,7 +47,89 @@ def _register_fonts():
     for name, file in (("Sans", "DejaVuSans.ttf"), ("Sans-Bold", "DejaVuSans-Bold.ttf"),
                        ("Mono", "DejaVuSansMono.ttf"), ("Mono-Bold", "DejaVuSansMono-Bold.ttf")):
         pdfmetrics.registerFont(TTFont(name, str(FONT_DIR / file)))
+    for key, family, _ in SCRIPTS:
+        pdfmetrics.registerFont(TTFont(key, str(FONT_DIR / f"NotoSans{family}-Regular.ttf")))
+        pdfmetrics.registerFont(TTFont(f"{key}-Bold", str(FONT_DIR / f"NotoSans{family}-Bold.ttf")))
     _fonts_ready = True
+
+
+# Indian scripts: (font key, Noto family, Unicode block). Text in these scripts is drawn in
+# Noto and shaped with HarfBuzz; everything else (Latin, digits, ₹) stays in DejaVu.
+SCRIPTS = (
+    ("Deva", "Devanagari", "\u0900-\u097F\uA8E0-\uA8FF\u1CD0-\u1CFF"),   # Hindi, Marathi
+    ("Beng", "Bengali",    "\u0980-\u09FF"),
+    ("Guru", "Gurmukhi",   "\u0A00-\u0A7F"),                            # Punjabi
+    ("Gujr", "Gujarati",   "\u0A80-\u0AFF"),
+    ("Taml", "Tamil",      "\u0B80-\u0BFF"),
+    ("Telu", "Telugu",     "\u0C00-\u0C7F"),
+    ("Knda", "Kannada",    "\u0C80-\u0CFF"),
+    ("Mlym", "Malayalam",  "\u0D00-\u0D7F"),
+)
+# ZWNJ/ZWJ keep half-forms intact and the dandas । ॥ are shared by several scripts:
+# both stay inside the run around them. Spaces between words of one script stay too.
+_JOIN = "\u200C\u200D\u0964\u0965"
+_INDIC = re.compile("[" + "".join(r for _, _, r in SCRIPTS) + "]")
+_SCRIPT_RUN = re.compile("|".join(
+    f"(?P<{key}>[{r}{_JOIN}]+(?:[ ]+[{r}{_JOIN}]+)*)" for key, _, r in SCRIPTS))
+
+
+def _runs(s: str, font: str):
+    """Split text into (piece, font_name, shaped) runs: each Indian script in its Noto font, the rest in `font`."""
+    if not _INDIC.search(s):
+        return [(s, font, False)]
+    bold = "-Bold" if font.endswith("-Bold") else ""
+    out, pos = [], 0
+    for m in _SCRIPT_RUN.finditer(s):
+        if not _INDIC.search(m.group()):      # only joiners/dandas: leave them in the base font
+            continue
+        if m.start() > pos:
+            out.append((s[pos:m.start()], font, False))
+        out.append((m.group(), m.lastgroup + bold, _CAN_SHAPE))
+        pos = m.end()
+    if pos < len(s):
+        out.append((s[pos:], font, False))
+    return out
+
+
+def _run_width(piece: str, font: str, size: float, shaped: bool) -> float:
+    if shaped:
+        sh = shapeStr(piece, font, size, force=True)   # HarfBuzz advances (conjuncts are narrower than letters)
+        if isinstance(sh, ShapedStr):
+            return sum(g.x_advance for g in sh.__shapeData__) * size / 1000
+    return pdfmetrics.stringWidth(piece, font, size)
+
+
+def text_width(s: str, font: str, size: float) -> float:
+    return sum(_run_width(p, f, size, sh) for p, f, sh in _runs(s, font))
+
+
+def draw_text(c, s: str, x: float, y: float, font: str, size: float, align: str = "left"):
+    """drawString / drawCentredString / drawRightString that also prints Hindi correctly."""
+    runs = _runs(s, font)
+    if len(runs) == 1 and not runs[0][2]:   # no Hindi: the plain, fast path
+        c.setFont(font, size)
+        if align == "center":
+            c.drawCentredString(x, y, s)
+        elif align == "right":
+            c.drawRightString(x, y, s)
+        else:
+            c.drawString(x, y, s)
+        return
+    widths = [_run_width(p, f, size, sh) for p, f, sh in runs]
+    total = sum(widths)
+    x = x - total / 2 if align == "center" else (x - total if align == "right" else x)
+    for (piece, f, shaped), w in zip(runs, widths):
+        c.setFont(f, size)
+        if shaped:
+            # Shape it ourselves: canvas.drawString(shaping=True) skips conjuncts like न्य.
+            # A ShapedStr carries HarfBuzz glyphs and positions, which the text object draws as-is.
+            t = c.beginText(x, y)
+            t.setFont(f, size)
+            t.textOut(shapeStr(piece, f, size, force=True))
+            c.drawText(t)
+        else:
+            c.drawString(x, y, piece)
+        x += w
 
 
 # ── Formatting ────────────────────────────────────────────────────────────────
@@ -138,8 +231,8 @@ def receipt_view(store, overrides: Optional[dict] = None):
         store_name=get("store_name") or "STORE", address=get("address") or "", phone=get("phone") or "",
         gstin_raw=gstin, gstin=gstin if show("receipt_show_gstin") else "",
         upi_id=((get("upi_id") or "").strip()) if show("receipt_show_qr") else "",
-        footer=(get("receipt_footer") or "").strip() or DEFAULT_FOOTER,
-        policy=(get("receipt_policy") or "").strip() or DEFAULT_POLICY,
+        footer=(get("receipt_footer") or "").strip() or T(DEFAULT_FOOTER),
+        policy=(get("receipt_policy") or "").strip() or T(DEFAULT_POLICY),
         logo_data=get("logo_data"), show_points=show("receipt_show_points"),
     )
 
@@ -236,7 +329,7 @@ class Layout:
         return f"{family or self.family}{'-Bold' if bold else ''}"
 
     def sw(self, s, size, bold=False):
-        return pdfmetrics.stringWidth(s, self.font(bold), size)
+        return text_width(s, self.font(bold), size)
 
     def wrap(self, s, size, bold, width):
         out = []
@@ -268,13 +361,7 @@ class Layout:
         if self.dry:
             return
         self.c.setFillColorRGB(*color)
-        self.c.setFont(self.font(bold), size)
-        if align == "center":
-            self.c.drawCentredString(x, y, s)
-        elif align == "right":
-            self.c.drawRightString(x, y, s)
-        else:
-            self.c.drawString(x, y, s)
+        draw_text(self.c, s, x, y, self.font(bold), size, align)
 
     def gap(self, pts):
         self.y -= pts
@@ -392,48 +479,54 @@ def _items(L: Layout, f, size=8, show_hsn=False, show_gst=False, per_item_saving
         left = f"{qty_str(li.qty)} × {inr(li.rate)}" + (f"   {' · '.join(extra)}" if extra else "")
         L.row(left, inr(li.amount), size - 0.5, color=GREY, rcolor=BLACK)
         if per_item_saving and li.mrp > li.rate:
-            L.text(f"MRP {inr(li.mrp)} · you save {inr((li.mrp - li.rate) * li.qty)}", size - 1.5, color=accent)
+            L.text(T("MRP {mrp} · you save {amt}", mrp=inr(li.mrp), amt=inr((li.mrp - li.rate) * li.qty)), size - 1.5, color=accent)
 
 
 def _totals(L: Layout, f, size=8, india=True, big=12, grand_label="Grand total", grand_color=BLACK, short=False):
-    label = "Subtotal" if short else f"Subtotal ({f.count} item{'s' if f.count != 1 else ''}, qty {qty_str(f.total_qty)})"
+    if short:
+        label = T("Subtotal")
+    elif f.count == 1:
+        label = T("Subtotal (1 item, qty {q})", q=qty_str(f.total_qty))
+    else:
+        label = T("Subtotal ({n} items, qty {q})", n=f.count, q=qty_str(f.total_qty))
     L.row(label, inr(f.sub), size)
     if f.disc:
-        L.row("Discount" + (" & points" if f.redeemed else ""), "-" + inr(f.disc), size)
-        L.row("Taxable value", inr(f.taxable), size)
+        L.row(T("Discount & points" if f.redeemed else "Discount"), "-" + inr(f.disc), size)
+        L.row(T("Taxable value"), inr(f.taxable), size)
     if f.gst:
         if india:
             L.row("CGST", inr(f.gst / 2), size)
             L.row("SGST", inr(f.gst - round(f.gst / 2, 2)), size)
         else:
-            L.row("Tax", inr(f.gst), size)
+            L.row(T("Tax"), inr(f.gst), size)
     if abs(f.round_off) >= 0.01:
-        L.row("Round off", ("+" if f.round_off > 0 else "-") + inr(abs(f.round_off)), size)
+        L.row(T("Round off"), ("+" if f.round_off > 0 else "-") + inr(abs(f.round_off)), size)
     L.rule("solid", 1, BLACK, before=3, after=1)
-    L.row(grand_label, inr(f.grand), big, True, color=grand_color)
+    L.row(T(grand_label), inr(f.grand), big, True, color=grand_color)
 
 
 def _payment(L: Layout, bill, f, size=8, customer=None):
-    L.row(f"Paid ({bill.payment_mode})" if getattr(bill, "payment_mode", None) else "Paid", inr(f.paid), size)
+    mode = getattr(bill, "payment_mode", None)
+    L.row(T("Paid ({mode})", mode=T_mode(mode)) if mode else T("Paid"), inr(f.paid), size)
     if f.credit_used:
-        L.row("  of which store credit", inr(f.credit_used), size - 0.5, color=GREY)
+        L.row("  " + T("of which store credit"), inr(f.credit_used), size - 0.5, color=GREY)
     if f.change > 0:
-        L.row("Change given", inr(f.change), size)
+        L.row(T("Change given"), inr(f.change), size)
     elif f.change < 0:
-        L.row("Balance due", inr(-f.change), size, True)
+        L.row(T("Balance due"), inr(-f.change), size, True)
     if customer is not None and float(getattr(customer, "credit_balance", 0) or 0) > 0:
-        L.row("Total account balance due", inr(customer.credit_balance), size - 0.5, color=GREY)
+        L.row(T("Total account balance due"), inr(customer.credit_balance), size - 0.5, color=GREY)
 
 
 def _points(L: Layout, f, size=8, customer=None, color=BLACK):
     if not (f.earned or f.redeemed):
         return
     if f.redeemed:
-        L.row("Points used", f"-{f.redeemed}", size, color=color)
+        L.row(T("Points used"), f"-{f.redeemed}", size, color=color)
     if f.earned:
-        L.row("Points earned", f"+{f.earned}", size, color=color)
+        L.row(T("Points earned"), f"+{f.earned}", size, color=color)
     if customer is not None:
-        L.row("Points balance", str(int(getattr(customer, "loyalty_pts", 0) or 0)), size, color=color)
+        L.row(T("Points balance"), str(int(getattr(customer, "loyalty_pts", 0) or 0)), size, color=color)
 
 
 def _qr(L: Layout, s, bill, f, size=7.5, side=26 * mm):
@@ -442,7 +535,7 @@ def _qr(L: Layout, s, bill, f, size=7.5, side=26 * mm):
         return
     due = int(round(-f.change)) if f.change < 0 else int(round(f.grand))
     L.gap(3)
-    L.text(f"Scan to pay {'balance ' if f.change < 0 else ''}{inr(due)} by UPI", size, True, "center")
+    L.text(T("Scan to pay balance {amt} by UPI" if f.change < 0 else "Scan to pay {amt} by UPI", amt=inr(due)), size, True, "center")
     L.gap(2)
     L.image(_qr_reader(upi_url(s.upi_id, s.store_name, due, bill.bill_no)), side, side)
     L.text(s.upi_id, size - 0.5, align="center", color=GREY)
@@ -451,7 +544,7 @@ def _qr(L: Layout, s, bill, f, size=7.5, side=26 * mm):
 def _void_banner(L: Layout, bill, size=10):
     if getattr(bill, "status", "") == "Void":
         L.gap(2)
-        L.boxed(lambda: L.text("CANCELLED BILL", size, True, "center", color=(0.75, 0, 0)), stroke=(0.75, 0, 0), pad=3)
+        L.boxed(lambda: L.text(T("CANCELLED BILL"), size, True, "center", color=(0.75, 0, 0)), stroke=(0.75, 0, 0), pad=3)
 
 
 def _footer(L: Layout, s, size=8, color=BLACK):
@@ -471,28 +564,28 @@ def thermal(bill, items, s, customer, f, width_mm=80, bold=False):
         L.text(s.store_name, title, True, "center")
         if s.address:
             L.text(s.address, base - 0.5, align="center")
-        contact = " · ".join(x for x in (s.phone and f"Ph {s.phone}", s.gstin and f"GSTIN {s.gstin}") if x)
+        contact = " · ".join(x for x in (s.phone and T("Ph {phone}", phone=s.phone), s.gstin and f"GSTIN {s.gstin}") if x)
         if contact:
             L.text(contact, base - 1, align="center")
         _void_banner(L, bill)
         L.rule("dash")
         when = f"{date_str(bill.bill_date, short=narrow)} {time_str(bill.bill_time)}"
-        L.row(f"Bill {bill.bill_no}", when, base - 0.5, bold)
+        L.row(T("Bill {no}", no=bill.bill_no), when, base - 0.5, bold)
         if bill.customer_name:
             L.row(bill.customer_name, bill.phone or "", base - 0.5, bold)
         L.rule("dash")
         _items(L, f, base, show_gst=False)
         L.rule("dash")
         if narrow:
-            L.text(f"{f.count} items · qty {qty_str(f.total_qty)}", base - 1, color=GREY)
+            L.text(T("{n} items · qty {q}", n=f.count, q=qty_str(f.total_qty)), base - 1, color=GREY)
         _totals(L, f, base, big=base + (3 if bold else 2.5), grand_label="TOTAL", short=narrow)
         L.rule("dash")
         _payment(L, bill, f, base - 0.5, customer)
         if f.saved > 0:
-            L.text(f"You saved {inr(f.saved)}", base, True, "center")
+            L.text(T("You saved {amt}", amt=inr(f.saved)), base, True, "center")
         _points(L, f, base - 0.5, customer)
         if getattr(bill, "notes", None):
-            L.text(f"Note: {bill.notes}", base - 1.5, color=GREY)
+            L.text(T("Note: {note}", note=bill.notes), base - 1.5, color=GREY)
         L.rule("dash")
         _footer(L, s, base)
         _qr(L, s, bill, f, base - 0.5, side=(22 if narrow else 28) * mm)
@@ -513,24 +606,24 @@ def design1(bill, items, s, customer, f):
         if s.address:
             L.text(s.address, 7.5, align="center")
         if s.phone:
-            L.text(f"Phone: {s.phone}", 7.5, align="center")
+            L.text(T("Phone: {phone}", phone=s.phone), 7.5, align="center")
         if s.gstin:
             L.text(f"GSTIN: {s.gstin}", 7.5, True, "center")
         L.gap(4)
-        L.boxed(lambda: L.text("SALES INVOICE", 9, True, "center", WHITE), fill=BLUE, pad=3)
+        L.boxed(lambda: L.text(T("SALES INVOICE"), 9, True, "center", WHITE), fill=BLUE, pad=3)
         _void_banner(L, bill)
         L.gap(1)
-        L.row(f"Bill {bill.bill_no}", f"{date_str(bill.bill_date)}, {time_str(bill.bill_time)}", 7.5)
-        L.row(f"Customer: {bill.customer_name or 'Walk-in'}", bill.phone or "", 7.5)
+        L.row(T("Bill {no}", no=bill.bill_no), f"{date_str(bill.bill_date)}, {time_str(bill.bill_time)}", 7.5)
+        L.row(T("Customer: {name}", name=bill.customer_name or T("Walk-in")), bill.phone or "", 7.5)
         L.rule("solid", 0.8, BLUE, before=3)
-        L.row("Item", "Amount", 7.5, True, color=BLUE)
+        L.row(T("Item"), T("Amount"), 7.5, True, color=BLUE)
         L.rule("solid", 0.4)
         _items(L, f, 8, per_item_saving=True, accent=RED)
         L.rule("solid", 0.8, BLUE)
         _totals(L, f, 8, big=12, grand_color=BLUE)
         if f.saved > 0:
             L.gap(4)
-            L.boxed(lambda: L.text(f"You saved {inr(f.saved)}", 9.5, True, "center", (0.1, 0.45, 0.15)),
+            L.boxed(lambda: L.text(T("You saved {amt}", amt=inr(f.saved)), 9.5, True, "center", (0.1, 0.45, 0.15)),
                     fill=(0.9, 0.97, 0.9), stroke=(0.4, 0.7, 0.4), pad=3, radius=3)
         L.rule("dash")
         _payment(L, bill, f, 7.5, customer)
@@ -538,7 +631,7 @@ def design1(bill, items, s, customer, f):
             L.rule("dash")
             _points(L, f, 7.5, customer, RED)
         if getattr(bill, "notes", None):
-            L.text(f"Note: {bill.notes}", 6.5, color=GREY)
+            L.text(T("Note: {note}", note=bill.notes), 6.5, color=GREY)
         L.gap(5)
         L.barcode(bill.bill_no)
         _footer(L, s, 8.5, BLUE)
@@ -560,16 +653,16 @@ def design2(bill, items, s, customer, f):
         L.text(s.store_name, 14, True, "center", WHITE)
         if s.address:
             L.text(s.address, 7.5, align="center", color=WHITE)
-        contact = " · ".join(x for x in (s.phone and f"Ph {s.phone}", s.gstin and f"GSTIN {s.gstin}") if x)
+        contact = " · ".join(x for x in (s.phone and T("Ph {phone}", phone=s.phone), s.gstin and f"GSTIN {s.gstin}") if x)
         if contact:
             L.text(contact, 7, align="center", color=WHITE)
         L.gap(2)
 
     def info(L: Layout):
-        L.row(f"Invoice {bill.bill_no}", date_str(bill.bill_date), 7.5)
-        L.row(f"Customer: {bill.customer_name or 'Walk-in'}", time_str(bill.bill_time), 7.5)
+        L.row(T("Invoice {no}", no=bill.bill_no), date_str(bill.bill_date), 7.5)
+        L.row(T("Customer: {name}", name=bill.customer_name or T("Walk-in")), time_str(bill.bill_time), 7.5)
         if bill.phone:
-            L.text(f"Phone: {bill.phone}", 7.5)
+            L.text(T("Phone: {phone}", phone=bill.phone), 7.5)
 
     def body(L: Layout):
         L.y = L.H   # header bleeds to the top edge
@@ -578,25 +671,25 @@ def design2(bill, items, s, customer, f):
         _void_banner(L, bill)
         L.boxed(lambda: info(L), fill=(0.95, 0.95, 0.95), stroke=(0.5, 0.5, 0.5), dash=True, pad=3)
         L.gap(2)
-        L.row("Item", "Amount", 7.5, True)
+        L.row(T("Item"), T("Amount"), 7.5, True)
         L.rule("solid", 0.8, BLACK, before=2.5)
         _items(L, f, 8, per_item_saving=True, accent=(0.45, 0.45, 0.45))
         L.rule("solid", 0.8, BLACK)
         if f.item_savings:
-            L.row("MRP total", inr(f.mrp_total), 7.5, color=GREY)
-            L.row("Savings on MRP", "-" + inr(f.item_savings), 7.5, color=GREY)
+            L.row(T("MRP total"), inr(f.mrp_total), 7.5, color=GREY)
+            L.row(T("Savings on MRP"), "-" + inr(f.item_savings), 7.5, color=GREY)
         _totals(L, f, 8, big=12, grand_label="Net total")
         if f.saved > 0:
             L.gap(2)
-            L.row("You saved", inr(f.saved), 9.5, True, color=BLUE)
+            L.row(T("You saved"), inr(f.saved), 9.5, True, color=BLUE)
         L.rule("dash")
-        L.text("Amount in words", 7, True)
+        L.text(T("Amount in words"), 7, True)
         L.text(amount_in_words(f.grand), 7, color=GREY)
         L.rule("dash")
         _payment(L, bill, f, 7.5, customer)
         _points(L, f, 7.5, customer, (0.55, 0.4, 0.05))
         if getattr(bill, "notes", None):
-            L.text(f"Note: {bill.notes}", 6.5, color=GREY)
+            L.text(T("Note: {note}", note=bill.notes), 6.5, color=GREY)
         L.gap(5)
         L.barcode(bill.bill_no)
         _footer(L, s, 8.5)
@@ -612,7 +705,7 @@ def design3(bill, items, s, customer, f):
 
     def body(L: Layout):
         L.y = L.H
-        L.boxed(lambda: L.text("BILL", 11, True, "center", WHITE), fill=BLACK, pad=3, bleed=True)
+        L.boxed(lambda: L.text(T("BILL"), 11, True, "center", WHITE), fill=BLACK, pad=3, bleed=True)
         L.gap(6)
         # Store details on the left, logo (or initials) on the right — side by side, no overlap
         top, logo_w, logo_h = L.y, 20 * mm, 16 * mm
@@ -621,7 +714,7 @@ def design3(bill, items, s, customer, f):
         if s.address:
             L.text(s.address, 7.5, x1=text_x1)
         if s.phone:
-            L.text(f"Phone: {s.phone}", 7.5, x1=text_x1)
+            L.text(T("Phone: {phone}", phone=s.phone), 7.5, x1=text_x1)
         if s.gstin:
             L.text(f"GSTIN: {s.gstin}", 7.5, True, x1=text_x1)
         left_end = L.y
@@ -634,19 +727,18 @@ def design3(bill, items, s, customer, f):
                 L.c.setStrokeColorRGB(*BLACK)
                 L.c.setLineWidth(1)
                 L.c.rect(L.x1 - logo_w, top - logo_h, logo_w, logo_h)
-                L.c.setFont("Sans-Bold", 18)
                 L.c.setFillColorRGB(*BLACK)
-                L.c.drawCentredString(L.x1 - logo_w / 2, top - logo_h / 2 - 6, initials)
+                draw_text(L.c, initials, L.x1 - logo_w / 2, top - logo_h / 2 - 6, "Sans-Bold", 18, "center")
             L.y -= logo_h
         L.y = min(left_end, L.y)
         _void_banner(L, bill)
         L.rule("solid", 1, BLACK, before=4)
-        L.row(f"Bill {bill.bill_no}", f"{date_str(bill.bill_date)}, {time_str(bill.bill_time)}", 7.5)
-        L.text(f"Customer: {bill.customer_name or 'Walk-in'}", 7.5)
+        L.row(T("Bill {no}", no=bill.bill_no), f"{date_str(bill.bill_date)}, {time_str(bill.bill_time)}", 7.5)
+        L.text(T("Customer: {name}", name=bill.customer_name or T("Walk-in")), 7.5)
         if bill.phone:
-            L.text(f"Phone: {bill.phone}", 7.5)
+            L.text(T("Phone: {phone}", phone=bill.phone), 7.5)
         L.gap(3)
-        L.row("Item", "Amount", 7.5, True, color=RED)
+        L.row(T("Item"), T("Amount"), 7.5, True, color=RED)
         L.rule("solid", 0.8, RED, before=2.5)
         _items(L, f, 8)
         L.gap(5)
@@ -655,13 +747,13 @@ def design3(bill, items, s, customer, f):
         L.boxed(lambda: _payment(L, bill, f, 8, customer), fill=(0.93, 0.98, 0.88), stroke=(0.4, 0.65, 0.3), pad=4, radius=3)
         if f.saved > 0:
             L.gap(2)
-            L.text(f"You saved {inr(f.saved)}", 9, True, "center", BLUE)
+            L.text(T("You saved {amt}", amt=inr(f.saved)), 9, True, "center", BLUE)
         _points(L, f, 7.5, customer, (0.55, 0.4, 0.05))
         if getattr(bill, "notes", None):
-            L.text(f"Note: {bill.notes}", 6.5, color=GREY)
+            L.text(T("Note: {note}", note=bill.notes), 6.5, color=GREY)
         _qr(L, s, bill, f)
         L.gap(5)
-        L.boxed(lambda: (L.text("Terms and conditions", 7, True), L.text(s.policy, 7)), stroke=BLACK, pad=3)
+        L.boxed(lambda: (L.text(T("Terms and conditions"), 7, True), L.text(s.policy, 7)), stroke=BLACK, pad=3)
         L.gap(6)
         L.boxed(lambda: L.text(s.footer, 9, True, "center", WHITE), fill=BLACK, pad=4, bleed=True)
         L.y += 4.5 * mm   # the footer bar runs to the bottom edge
@@ -684,34 +776,34 @@ def design4(bill, items, s, customer, f):
             for i, v in enumerate(cells[1:], start=1):
                 L._draw(v, cols[i + 1] - 2 if i < 3 else cols[4], L.y, size, bold, "right", BLACK)
 
-        tr(["Rate", "Taxable ₹", "CGST ₹", "SGST ₹"], True)
+        tr([T("Rate"), T("Taxable") + " ₹", "CGST ₹", "SGST ₹"], True)
         L.rule("solid", 0.4, before=2.5, after=0.5)
         for g in f.gst_rows:
             tr([f"{g.rate:g}%", num(g.taxable), num(g.cgst), num(g.sgst)])
         L.rule("solid", 0.4, before=2.5, after=0.5)
-        tr(["Total", num(f.taxable), num(f.gst / 2), num(f.gst - round(f.gst / 2, 2))], True)
+        tr([T("Total"), num(f.taxable), num(f.gst / 2), num(f.gst - round(f.gst / 2, 2))], True)
 
     def body(L: Layout):
-        L.text("TAX INVOICE", 8, True, "center", GREY)
+        L.text(T("TAX INVOICE"), 8, True, "center", GREY)
         L.text(s.store_name, 14, True, "center", (0.08, 0.25, 0.65))
         if s.address:
             L.text(s.address, 7.5, align="center")
         if s.phone:
-            L.text(f"Phone: {s.phone}", 7.5, align="center")
-        L.text(f"GSTIN: {gstin or 'NOT PROVIDED'}", 8, True, "center", BLACK if gstin else RED)
+            L.text(T("Phone: {phone}", phone=s.phone), 7.5, align="center")
+        L.text(f"GSTIN: {gstin or T('NOT PROVIDED')}", 8, True, "center", BLACK if gstin else RED)
         if state:
-            L.text(f"State: {gstin[:2]}-{state} · Place of supply: {gstin[:2]}-{state}", 7, align="center", color=GREY)
+            L.text(T("State: {state} · Place of supply: {state}", state=f"{gstin[:2]}-{state}"), 7, align="center", color=GREY)
         _void_banner(L, bill)
         L.rule("solid", 1, BLACK)
-        L.row(f"Invoice {bill.bill_no}", f"{date_str(bill.bill_date)}, {time_str(bill.bill_time)}", 7.5)
-        L.text(f"Customer: {bill.customer_name or 'Walk-in'}", 7.5)
+        L.row(T("Invoice {no}", no=bill.bill_no), f"{date_str(bill.bill_date)}, {time_str(bill.bill_time)}", 7.5)
+        L.text(T("Customer: {name}", name=bill.customer_name or T("Walk-in")), 7.5)
         if bill.phone:
-            L.text(f"Phone: {bill.phone}", 7.5)
+            L.text(T("Phone: {phone}", phone=bill.phone), 7.5)
         cust_gst = getattr(customer, "gst_no", None) if customer is not None else None
         if cust_gst:
-            L.text(f"Customer GSTIN: {cust_gst}", 7.5, True)
+            L.text(T("Customer GSTIN: {g}", g=cust_gst), 7.5, True)
         L.rule("solid", 0.6)
-        L.row("Item", "Amount", 7.5, True)
+        L.row(T("Item"), T("Amount"), 7.5, True)
         L.rule("solid", 0.4, before=2.5)
         _items(L, f, 8, show_hsn=True, show_gst=True)
         L.rule("solid", 0.6)
@@ -719,16 +811,16 @@ def design4(bill, items, s, customer, f):
         L.gap(4)
         gst_table(L)
         L.rule("dash")
-        L.text("Amount in words", 7, True)
+        L.text(T("Amount in words"), 7, True)
         L.text(amount_in_words(f.grand), 7, color=GREY)
         L.rule("dash")
         _payment(L, bill, f, 7.5, customer)
         _points(L, f, 7.5, customer)
         if getattr(bill, "notes", None):
-            L.text(f"Note: {bill.notes}", 6.5, color=GREY)
+            L.text(T("Note: {note}", note=bill.notes), 6.5, color=GREY)
         _qr(L, s, bill, f)
         L.rule("dash")
-        L.text("Terms and conditions", 7, True)
+        L.text(T("Terms and conditions"), 7, True)
         L.text(s.policy, 7)
         _footer(L, s, 8.5)
 
@@ -740,6 +832,15 @@ def design4(bill, items, s, customer, f):
 def generate_receipt_pdf(bill, raw_items, store, paper_size: Optional[str] = None, customer=None,
                          overrides: Optional[dict] = None, hsn: Optional[dict] = None) -> bytes:
     """paper_size None → the store's saved receipt design."""
+    lang = (overrides or {}).get("language") or getattr(store, "language", None) or "en"
+    token = set_language(lang)
+    try:
+        return _generate(bill, raw_items, store, paper_size, customer, overrides, hsn)
+    finally:
+        reset_language(token)
+
+
+def _generate(bill, raw_items, store, paper_size, customer, overrides, hsn) -> bytes:
     paper = paper_size or (overrides or {}).get("receipt_design") or getattr(store, "receipt_design", None) or "3inch"
     s = receipt_view(store, overrides)
     f = bill_figures(bill, raw_items, s.show_points, hsn)

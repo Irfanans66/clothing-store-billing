@@ -21,6 +21,16 @@ class TokenResponse(BaseModel):
     role: str
     store_code: Optional[str] = None
     store_name: Optional[str] = None
+    language: Optional[str] = None
+
+LANGUAGES = {"en", "hi", "mr", "gu", "bn", "pa", "ta", "te", "kn", "ml"}
+
+
+def _check_language(v: Optional[str]) -> Optional[str]:
+    if v is not None and v not in LANGUAGES:
+        raise ValueError(f"Unsupported language: {v}")
+    return v
+
 
 class StoreRegisterRequest(BaseModel):
     store_name: str
@@ -32,6 +42,12 @@ class StoreRegisterRequest(BaseModel):
     address: str
     gstin: Optional[str] = ""
     country: Optional[str] = "India"
+    language: Optional[str] = "en"
+
+    @field_validator("language")
+    @classmethod
+    def known_language(cls, v: Optional[str]) -> Optional[str]:
+        return _check_language(v)
 
     @field_validator("owner_user")
     @classmethod
@@ -88,6 +104,7 @@ class StoreOut(BaseModel):
     plan: str
     upi_id: Optional[str] = None
     country: Optional[str] = "India"
+    language: Optional[str] = "en"
     receipt_design: Optional[str] = "3inch"
     receipt_footer: Optional[str] = None
     receipt_policy: Optional[str] = None
@@ -109,6 +126,7 @@ class StorePatchRequest(BaseModel):
     plan: Optional[str] = None
     upi_id: Optional[str] = None
     country: Optional[str] = None
+    language: Optional[str] = None
     notes: Optional[str] = None
     is_test: Optional[bool] = None
     receipt_design: Optional[str] = None
@@ -128,6 +146,11 @@ class StorePatchRequest(BaseModel):
         if v and not re.fullmatch(r"\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]", v):
             raise ValueError("GSTIN should be 15 characters, like 29ABCDE1234F1Z5")
         return v
+
+    @field_validator("language")
+    @classmethod
+    def known_language(cls, v: Optional[str]) -> Optional[str]:
+        return _check_language(v)
 
     @field_validator("receipt_design")
     @classmethod
@@ -149,6 +172,7 @@ RECEIPT_DESIGNS = {"2inch", "3inch", "3inch-bold", "design1", "design2", "design
 
 class ReceiptPreviewRequest(BaseModel):
     receipt_design: str = "3inch"
+    language: Optional[str] = None     # None → the shop's saved language
     receipt_footer: Optional[str] = None
     receipt_policy: Optional[str] = None
     receipt_show_gstin: bool = True

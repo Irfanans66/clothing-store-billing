@@ -10,6 +10,7 @@
 // the logo, UPI QR, ₹ and Hindi all print exactly as previewed.
 import { useSyncExternalStore } from 'react'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { translate as t } from '../i18n'
 
 export const PRINTER_SUPPORTED = typeof navigator !== 'undefined' && 'serial' in navigator
 const OPEN_TIMEOUT_MS = 12000
@@ -41,14 +42,14 @@ let isOpen = false
 let busy = null     // the job in progress, so prints don't interleave
 
 export class PrinterError extends Error {}
-const OFF_MSG = 'Printer is off or too far. Turn it on, bring it close and tap Retry.'
+const OFF_MSG = 'Printer is off or too far. Turn it on, bring it close and tap Retry.'   // translated when shown
 
 function friendly(err) {
   if (err instanceof PrinterError) return err
   const n = err?.name
   if (n === 'SecurityError' || n === 'NotAllowedError')
-    return new PrinterError('Bluetooth permission is off. Allow "Nearby devices" for Chrome in phone Settings → Apps, then try again.')
-  return new PrinterError(OFF_MSG)
+    return new PrinterError(t('Bluetooth permission is off. Allow "Nearby devices" for Chrome in phone Settings → Apps, then try again.'))
+  return new PrinterError(t(OFF_MSG))
 }
 
 // ── Connection ───────────────────────────────────────────────────────────────
@@ -75,7 +76,7 @@ function ensureInit() {
 }
 
 function withTimeout(p, ms) {
-  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new PrinterError(OFF_MSG)), ms))])
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new PrinterError(t(OFF_MSG))), ms))])
 }
 
 async function closePort() {
@@ -95,7 +96,7 @@ async function openPort() {
 
 /** Reconnect to the saved printer (app start, coming back to the app, "Tap to reconnect"). */
 export async function reconnectPrinter() {
-  if (!port) { setState({ status: 'none' }); throw new PrinterError('No printer set up yet.') }
+  if (!port) { setState({ status: 'none' }); throw new PrinterError(t('No printer set up yet.')) }
   if (busy) return busy
   setState({ status: 'connecting' })
   try {
@@ -156,7 +157,7 @@ async function writeAll(bytes) {
 
 /** Send raw ESC/POS bytes, reconnecting once if the link dropped. */
 async function send(bytes) {
-  if (!port) throw new PrinterError('No printer set up yet.')
+  if (!port) throw new PrinterError(t('No printer set up yet.'))
   const job = (async () => {
     setState({ status: 'printing' })
     try {
@@ -252,7 +253,7 @@ async function pdfToCanvases(blob) {
 export async function printPdfDirect(blob) {
   let canvases
   try { canvases = await pdfToCanvases(blob) }
-  catch { throw new PrinterError('Could not prepare the receipt for printing.') }
+  catch { throw new PrinterError(t('Could not prepare the receipt for printing.')) }
   await send(rasterJob(canvases.map(canvasToBits), { cut: canvases[0]?.width === 576 }))
 }
 
@@ -268,11 +269,11 @@ export async function printTestPage({ dots = 384, storeName = '' } = {}) {
   ctx.textAlign = 'center'
   const mid = dots / 2
   ctx.font = 'bold 30px sans-serif'
-  ctx.fillText('Printer connected ✓', mid, 44, dots - 16)
+  ctx.fillText(t('Printer connected ✓'), mid, 44, dots - 16)
   ctx.font = '22px sans-serif'
   if (storeName) ctx.fillText(storeName, mid, 84, dots - 16)
-  ctx.fillText(`${dots === 384 ? '58' : '80'} mm paper · ₹ 1,234.00`, mid, 124, dots - 16)
-  ctx.fillText('धन्यवाद, फिर आइए!', mid, 164, dots - 16)
+  ctx.fillText(`${dots === 384 ? '58' : '80'} mm · ₹ 1,234.00`, mid, 124, dots - 16)
+  ctx.fillText(t('Thank you! Visit again'), mid, 164, dots - 16)
   ctx.fillRect(8, 190, dots - 16, 3)
   ctx.font = '18px sans-serif'
   ctx.fillText(new Date().toLocaleString('en-IN'), mid, 226, dots - 16)

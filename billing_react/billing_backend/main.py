@@ -53,6 +53,8 @@ def _migrate_db():
         "ALTER TABLE products ADD COLUMN labels_printed INTEGER DEFAULT 0",
         # Receipt settings (shared by every device in the store, and used for WhatsApp receipt links)
         "ALTER TABLE stores ADD COLUMN receipt_design VARCHAR(20) DEFAULT '3inch'",
+        # Shop language: the app and every receipt use it
+        "ALTER TABLE stores ADD COLUMN language VARCHAR(5) DEFAULT 'en'",
         "ALTER TABLE stores ADD COLUMN receipt_footer VARCHAR(120)",
         "ALTER TABLE stores ADD COLUMN receipt_policy VARCHAR(300)",
         "ALTER TABLE stores ADD COLUMN receipt_show_gstin BOOLEAN DEFAULT TRUE",

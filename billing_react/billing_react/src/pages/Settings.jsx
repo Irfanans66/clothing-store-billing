@@ -11,6 +11,7 @@ import { useSearchParams } from 'react-router-dom'
 import { getStoreProfile, updateStoreProfile, getLoyaltyProgram, updateLoyaltyProgram, getReceiptPreview } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { PrinterSection } from '../components/PrinterSetup'
+import { useT, translate, useLangStore, LANGUAGE_OPTIONS } from '../i18n'
 import { PLATFORMS, openPaymentDashboard } from '../utils/paymentPlatforms'
 import { COUNTRIES, getCurrencyInfo, useCurrency } from '../utils/currency'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -50,11 +51,10 @@ const RECEIPT_LAYOUTS = [
   { value: 'design4',    group: 'Invoice (80 mm)', name: 'Tax invoice', desc: 'GST breakdown table (CGST/SGST). Needs a GSTIN.' },
 ]
 
-const DEFAULT_FOOTER = 'Thank You... Visit Again !'
-const DEFAULT_POLICY = 'Exchange within 7 days with receipt'
 
 const CSS = `
 .st-tabs .ant-tabs-nav { margin-bottom: 20px; }
+.st-lang { padding: 14px; border-radius: 12px; background: rgba(47,102,144,0.07); margin-bottom: 20px; }
 .st-tab { display: inline-flex; align-items: center; gap: 6px; }
 @media (max-width: 767px) {
   .st-tab { flex-direction: column; gap: 2px; font-size: 11.5px; }
@@ -115,7 +115,7 @@ function LayoutSketch({ value }) {
 // Resize an uploaded logo so it stays small (≤ 320 px) before saving it with the store
 function readLogo(file) {
   return new Promise((resolve, reject) => {
-    if (!/^image\/(png|jpeg)$/.test(file.type)) { reject(new Error('Use a PNG or JPG image')); return }
+    if (!/^image\/(png|jpeg)$/.test(file.type)) { reject(new Error(translate('Use a PNG or JPG image'))); return }
     const img = new Image()
     img.onload = () => {
       const scale = Math.min(1, 320 / Math.max(img.width, img.height))
@@ -129,7 +129,7 @@ function readLogo(file) {
       URL.revokeObjectURL(img.src)
       resolve(c.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.9))
     }
-    img.onerror = () => reject(new Error('Could not read that image'))
+    img.onerror = () => reject(new Error(translate('Could not read that image')))
     img.src = URL.createObjectURL(file)
   })
 }
@@ -151,6 +151,10 @@ export default function Settings() {
   const [previewUpi, setPreviewUpi] = useState('')
   const [loyalty, setLoyalty] = useState(null)
   const [payMonitor, setPayMonitor] = useState(() => localStorage.getItem('payment_monitor_platform') || '')
+  const t = useT()
+  const lang = useLangStore((s) => s.lang)
+  const setLang = useLangStore((s) => s.setLang)
+  const [savingLang, setSavingLang] = useState(false)
 
   // Receipt settings (saved with the store, so every device and WhatsApp links use them)
   const [receipt, setReceipt] = useState(null)
@@ -200,17 +204,17 @@ export default function Settings() {
     clearTimeout(previewTimer.current)
     previewTimer.current = setTimeout(() => {
       setPreviewing(true)
-      getReceiptPreview(receipt)
+      getReceiptPreview({ ...receipt, language: lang })
         .then(pdfToImage)
         .then(setPreviewImg)
-        .catch(() => message.error('Could not build the preview'))
+        .catch(() => message.error(translate('Could not build the preview')))
         .finally(() => setPreviewing(false))
     }, 500)
     return () => clearTimeout(previewTimer.current)
-  }, [receipt, tab, isMobile])
+  }, [receipt, tab, isMobile, lang])
 
   if (role !== 'Admin') {
-    return <Card><Title level={4}>Admin access required</Title></Card>
+    return <Card><Title level={4}>{t('Admin access required')}</Title></Card>
   }
 
   const changeTab = (k) => { setTab(k); setSearchParams(k === 'info' ? {} : { tab: k }, { replace: true }) }
@@ -224,7 +228,7 @@ export default function Settings() {
       setProfile(p)
       if (values.country) setAuth({ country: values.country })
       if (values.store_name) setAuth({ storeName: values.store_name })
-      message.success('Store info saved')
+      message.success(t('Store info saved'))
     } catch (err) { message.error(err.message) }
     finally { setSaving(false) }
   }
@@ -234,7 +238,7 @@ export default function Settings() {
     try {
       await updateStoreProfile({ upi_id: values.upi_id?.trim() || '' })
       setPreviewUpi(values.upi_id?.trim() || '')
-      message.success('UPI ID saved')
+      message.success(t('UPI ID saved'))
     } catch (err) { message.error(err.message) }
     finally { setSaving(false) }
   }
@@ -245,7 +249,7 @@ export default function Settings() {
       await updateStoreProfile({ ...receipt, logo_data: receipt.logo_data || '' })
       setSavedReceipt(receipt)
       try { localStorage.removeItem('receipt_paper_size') } catch { /* old per-device setting */ }
-      message.success('Receipt settings saved — every device and WhatsApp receipt now uses them')
+      message.success(t('Receipt settings saved — every device and WhatsApp receipt now uses them'))
     } catch (err) { message.error(err.message) }
     finally { setSaving(false) }
   }
@@ -253,7 +257,7 @@ export default function Settings() {
   async function openFullPreview() {
     setPhonePreview(true)
     setPreviewImg(null)
-    try { setPreviewImg(await pdfToImage(await getReceiptPreview(receipt))) }
+    try { setPreviewImg(await pdfToImage(await getReceiptPreview({ ...receipt, language: lang }))) }
     catch (err) { message.error(err.message); setPhonePreview(false) }
   }
 
@@ -271,25 +275,37 @@ export default function Settings() {
       const { rupees_per_point, ...rest } = values
       const updated = await updateLoyaltyProgram({ ...rest, points_per_rupee: rupees_per_point > 0 ? 1 / rupees_per_point : 0.01 })
       setLoyalty(updated)
-      message.success('Loyalty program saved')
+      message.success(t('Loyalty program saved'))
     } catch (err) {
-      message.error(err.message || 'Failed to save loyalty program')
+      message.error(err.message || t('Failed to save loyalty program'))
     } finally {
       setSaving(false)
     }
   }
 
-  const tabLabel = (icon, text) => <span className="st-tab">{icon}{text}</span>
+  // Saved on the store: every device, staff login and receipt switches to it
+  async function changeLanguage(code) {
+    setSavingLang(true)
+    try {
+      const p = await updateStoreProfile({ language: code })
+      setProfile(p)
+      await setLang(code)
+      message.success(translate('Language changed. The app and receipts now use it.'))
+    } catch (err) { message.error(err.message) }
+    finally { setSavingLang(false) }
+  }
+
+  const tabLabel = (icon, text) => <span className="st-tab">{icon}{t(text)}</span>
   const layout = RECEIPT_LAYOUTS.find((l) => l.value === receipt?.receipt_design)
 
   const receiptTab = !receipt ? <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div> : (
     <div className="st-receipt">
       <div>
-        <div className="st-section" style={{ marginTop: 0 }}>1. Paper &amp; layout</div>
+        <div className="st-section" style={{ marginTop: 0 }}>{t('1. Paper & layout')}</div>
         {['Thermal roll', 'Invoice (80 mm)'].map((group) => (
           <div key={group} style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 13, color: TEXT, fontWeight: 600, marginBottom: 6 }}>{group}</div>
-            <div className="st-layouts" role="radiogroup" aria-label={group}>
+            <div style={{ fontSize: 13, color: TEXT, fontWeight: 600, marginBottom: 6 }}>{t(group)}</div>
+            <div className="st-layouts" role="radiogroup" aria-label={t(group)}>
               {RECEIPT_LAYOUTS.filter((l) => l.group === group).map((l) => {
                 const on = receipt.receipt_design === l.value
                 const locked = l.value === 'design4' && !profile?.gstin
@@ -298,9 +314,9 @@ export default function Settings() {
                     className={`st-layout${on ? ' st-layout-on' : ''}`} onClick={() => setR({ receipt_design: l.value })}>
                     <LayoutSketch value={l.value} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, color: on ? PRIMARY : TEXT, fontSize: 13.5 }}>{l.name}</div>
+                      <div style={{ fontWeight: 700, color: on ? PRIMARY : TEXT, fontSize: 13.5 }}>{t(l.name)}</div>
                       <div style={{ fontSize: 12, color: SUB, lineHeight: 1.35, marginTop: 2 }}>
-                        {locked ? <>Needs a GSTIN. <a onClick={(e) => { e.stopPropagation(); changeTab('info') }} style={{ color: PRIMARY, pointerEvents: 'auto' }}>Add GSTIN in Store tab</a></> : l.desc}
+                        {locked ? <>{t('Needs a GSTIN.')} <a onClick={(e) => { e.stopPropagation(); changeTab('info') }} style={{ color: PRIMARY, pointerEvents: 'auto' }}>{t('Add GSTIN in Store tab')}</a></> : t(l.desc)}
                       </div>
                     </div>
                     {on && <CheckCircleFilled style={{ position: 'absolute', top: 8, right: 8, color: PRIMARY, fontSize: 16 }} />}
@@ -311,38 +327,38 @@ export default function Settings() {
           </div>
         ))}
 
-        <div className="st-section">2. What the receipt says</div>
+        <div className="st-section">{t('2. What the receipt says')}</div>
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
-            <label htmlFor="rc-footer" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Thank-you line</label>
-            <Input id="rc-footer" maxLength={60} showCount value={receipt.receipt_footer} placeholder={DEFAULT_FOOTER}
+            <label htmlFor="rc-footer" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>{t('Thank-you line')}</label>
+            <Input id="rc-footer" maxLength={60} showCount value={receipt.receipt_footer} placeholder={t('Thank you! Visit again')}
               onChange={(e) => setR({ receipt_footer: e.target.value })} />
           </div>
           <div>
-            <label htmlFor="rc-policy" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Return / exchange policy</label>
+            <label htmlFor="rc-policy" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>{t('Return / exchange policy')}</label>
             <Input.TextArea id="rc-policy" rows={2} maxLength={200} showCount value={receipt.receipt_policy}
-              placeholder={`${DEFAULT_POLICY}. e.g. “No return. Exchange within 7 days with tags and bill.”`}
+              placeholder={t('Exchange within 7 days with receipt')}
               onChange={(e) => setR({ receipt_policy: e.target.value })} />
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, marginBottom: 4 }}>Logo</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, marginBottom: 4 }}>{t('Logo')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               {receipt.logo_data
-                ? <img src={receipt.logo_data} alt="Store logo" style={{ height: 48, maxWidth: 120, objectFit: 'contain', background: '#fff', borderRadius: 6, padding: 3 }} />
-                : <span style={{ fontSize: 12.5, color: SUB }}>No logo — the bill shows your initials instead.</span>}
-              <Button icon={<UploadOutlined />} onClick={() => fileRef.current?.click()}>{receipt.logo_data ? 'Change' : 'Upload logo'}</Button>
-              {receipt.logo_data && <Button icon={<DeleteOutlined />} onClick={() => setR({ logo_data: null })} aria-label="Remove logo" />}
+                ? <img src={receipt.logo_data} alt={t('Store logo')} style={{ height: 48, maxWidth: 120, objectFit: 'contain', background: '#fff', borderRadius: 6, padding: 3 }} />
+                : <span style={{ fontSize: 12.5, color: SUB }}>{t('No logo — the bill shows your initials instead.')}</span>}
+              <Button icon={<UploadOutlined />} onClick={() => fileRef.current?.click()}>{receipt.logo_data ? t('Change') : t('Upload logo')}</Button>
+              {receipt.logo_data && <Button icon={<DeleteOutlined />} onClick={() => setR({ logo_data: null })} aria-label={t('Remove logo')} />}
               <input ref={fileRef} type="file" accept="image/png,image/jpeg" onChange={onLogoFile} style={{ display: 'none' }} />
             </div>
-            <div style={{ fontSize: 12, color: SUB, marginTop: 4 }}>PNG or JPG. Printed on the “Bill with logo” layout.</div>
+            <div style={{ fontSize: 12, color: SUB, marginTop: 4 }}>{t('PNG or JPG. Printed on the “Bill with logo” layout.')}</div>
           </div>
         </div>
 
-        <div className="st-section">3. Show on receipt</div>
+        <div className="st-section">{t('3. Show on receipt')}</div>
         {[
-          ['receipt_show_gstin', 'GSTIN', profile?.gstin ? profile.gstin : 'Not set — add it under Store'],
-          ['receipt_show_qr', 'UPI QR code for payment', profile?.upi_id ? profile.upi_id : 'Add a UPI ID under UPI first'],
-          ['receipt_show_points', 'Loyalty points earned / balance', loyalty?.enabled ? 'When the customer earns or uses points' : 'Loyalty program is off'],
+          ['receipt_show_gstin', 'GSTIN', profile?.gstin ? profile.gstin : t('Not set — add it under Store')],
+          ['receipt_show_qr', t('UPI QR code for payment'), profile?.upi_id ? profile.upi_id : t('Add a UPI ID under UPI first')],
+          ['receipt_show_points', t('Loyalty points earned / balance'), loyalty?.enabled ? t('When the customer earns or uses points') : t('Loyalty program is off')],
         ].map(([k, l, hint]) => (
           <div key={k} className="st-switch">
             <div>
@@ -353,46 +369,46 @@ export default function Settings() {
           </div>
         ))}
 
-        {isMobile && !receiptDirty && <Button block size="large" icon={<EyeOutlined />} onClick={openFullPreview} style={{ marginTop: 16 }}>Preview receipt</Button>}
+        {isMobile && !receiptDirty && <Button block size="large" icon={<EyeOutlined />} onClick={openFullPreview} style={{ marginTop: 16 }}>{t('Preview receipt')}</Button>}
         <div className={`st-savebar${receiptDirty ? ' st-savebar-sticky' : ''}`}>
           {receiptDirty ? (
             isMobile ? (
               // Phone: one compact row pinned above the menu, with Preview inside it
               <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-                <Button icon={<EyeOutlined />} onClick={openFullPreview} aria-label="Preview receipt">Preview</Button>
-                <Button onClick={() => setReceipt(savedReceipt || receipt)} disabled={!savedReceipt}>Discard</Button>
-                <Button type="primary" loading={saving} onClick={saveReceipt} style={{ flex: 1 }}>Save</Button>
+                <Button icon={<EyeOutlined />} onClick={openFullPreview} aria-label={t('Preview receipt')}>{t('Preview')}</Button>
+                <Button onClick={() => setReceipt(savedReceipt || receipt)} disabled={!savedReceipt}>{t('Discard')}</Button>
+                <Button type="primary" loading={saving} onClick={saveReceipt} style={{ flex: 1 }}>{t('Save')}</Button>
               </div>
             ) : (
               <>
-                <span style={{ fontSize: 13, color: '#B9770E', fontWeight: 600, marginRight: 'auto' }}>Unsaved changes</span>
-                <Button onClick={() => setReceipt(savedReceipt || receipt)} disabled={!savedReceipt}>Discard</Button>
-                <Button type="primary" size="large" loading={saving} onClick={saveReceipt}>Save receipt settings</Button>
+                <span style={{ fontSize: 13, color: '#B9770E', fontWeight: 600, marginRight: 'auto' }}>{t('Unsaved changes')}</span>
+                <Button onClick={() => setReceipt(savedReceipt || receipt)} disabled={!savedReceipt}>{t('Discard')}</Button>
+                <Button type="primary" size="large" loading={saving} onClick={saveReceipt}>{t('Save receipt settings')}</Button>
               </>
             )
           ) : (
-            <span style={{ fontSize: 13.5, color: GOOD, fontWeight: 600 }}><CheckCircleFilled /> All changes saved</span>
+            <span style={{ fontSize: 13.5, color: GOOD, fontWeight: 600 }}><CheckCircleFilled /> {t('All changes saved')}</span>
           )}
         </div>
 
-        <div className="st-section">4. Printer</div>
+        <div className="st-section">{t('4. Printer')}</div>
         {/* Bills print with the saved layout, so the printer uses that paper width too */}
-        <PrinterSection receipt={savedReceipt || receipt} getSamplePdf={() => getReceiptPreview(savedReceipt || receipt)} />
+        <PrinterSection receipt={savedReceipt || receipt} getSamplePdf={() => getReceiptPreview({ ...(savedReceipt || receipt), language: lang })} />
         {isMobile && receiptDirty && <div style={{ height: 70 }} />}
       </div>
 
       {!isMobile && (
         <div style={{ position: 'sticky', top: 72 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontWeight: 700, color: TEXT }}>Preview <span style={{ fontWeight: 400, color: SUB, fontSize: 12.5 }}>· sample bill, {layout?.name}</span></span>
+            <span style={{ fontWeight: 700, color: TEXT }}>{t('Preview')} <span style={{ fontWeight: 400, color: SUB, fontSize: 12.5 }}>· {t('sample bill')}, {t(layout?.name || '')}</span></span>
             <span>
               {previewing && <Spin size="small" style={{ marginRight: 8 }} />}
-              <Tooltip title="Refresh"><Button size="small" icon={<ReloadOutlined />} onClick={() => setR({})} style={{ marginLeft: 6 }} aria-label="Refresh preview" /></Tooltip>
+              <Tooltip title={t('Refresh')}><Button size="small" icon={<ReloadOutlined />} onClick={() => setR({})} style={{ marginLeft: 6 }} aria-label={t('Refresh preview')} /></Tooltip>
             </span>
           </div>
           <div className="st-preview">
             {previewImg
-              ? <img src={previewImg} alt={`Sample receipt in the ${layout?.name} layout`} style={{ opacity: previewing ? 0.6 : 1 }} />
+              ? <img src={previewImg} alt={t('Sample receipt')} style={{ opacity: previewing ? 0.6 : 1 }} />
               : <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin /></div>}
           </div>
         </div>
@@ -402,13 +418,13 @@ export default function Settings() {
 
   return (
     <div>
-      <Modal open={phonePreview} onCancel={() => setPhonePreview(false)} footer={null} title="Receipt preview" width={420} centered>
+      <Modal open={phonePreview} onCancel={() => setPhonePreview(false)} footer={null} title={t('Receipt preview')} width={420} centered>
         <div className="st-preview">
-          {previewImg ? <img src={previewImg} alt="Sample receipt" /> : <div style={{ padding: 60 }}><Spin /></div>}
+          {previewImg ? <img src={previewImg} alt={t('Sample receipt')} /> : <div style={{ padding: 60 }}><Spin /></div>}
         </div>
       </Modal>
       <style>{CSS}</style>
-      <Title level={isMobile ? 4 : 3} style={{ margin: '0 0 12px', color: TEXT }}>Store settings</Title>
+      <Title level={isMobile ? 4 : 3} style={{ margin: '0 0 12px', color: TEXT }}>{t('Store settings')}</Title>
       <Card style={{ borderRadius: 14, maxWidth: 1180 }} styles={{ body: { padding: isMobile ? 12 : 24 } }}>
         <Tabs
           className="st-tabs"
@@ -420,26 +436,38 @@ export default function Settings() {
               key: 'info',
               label: tabLabel(<ShopOutlined />, 'Store'),
               children: (
-                <Form form={infoForm} layout="vertical" onFinish={saveInfo} style={{ maxWidth: 560 }}>
-                  <Form.Item name="store_name" label="Store name" rules={[{ required: true, message: 'Enter the store name' }]}><Input /></Form.Item>
-                  <Form.Item name="phone" label="Phone"><Input type="tel" /></Form.Item>
-                  <Form.Item name="email" label="Email"><Input type="email" /></Form.Item>
+                <div style={{ maxWidth: 560 }}>
+                <div className="st-lang">
+                  <label htmlFor="st-language" style={{ display: 'block', fontWeight: 600, color: TEXT, marginBottom: 6 }}>
+                    {t('Language for the app and receipts')}
+                  </label>
+                  <Select id="st-language" value={lang} onChange={changeLanguage} loading={savingLang} disabled={savingLang}
+                    options={LANGUAGE_OPTIONS} style={{ width: '100%' }} size="large" />
+                  <div style={{ fontSize: 12.5, color: SUB, marginTop: 6 }}>
+                    {t('Every screen, every staff login and every receipt use this language. Product and customer names stay as you typed them.')}
+                  </div>
+                </div>
+                <Form form={infoForm} layout="vertical" onFinish={saveInfo}>
+                  <Form.Item name="store_name" label={t('Store name')} rules={[{ required: true, message: t('Enter the store name') }]}><Input /></Form.Item>
+                  <Form.Item name="phone" label={t('Phone')}><Input type="tel" /></Form.Item>
+                  <Form.Item name="email" label={t('Email')}><Input type="email" /></Form.Item>
                   <Form.Item name="gstin" label="GSTIN" normalize={(v) => (v || '').toUpperCase().replace(/\s/g, '')}
-                    rules={[{ validator: (_, v) => (!v || GSTIN_RE.test(v) ? Promise.resolve() : Promise.reject(new Error('GSTIN should be 15 characters, like 29ABCDE1234F1Z5'))) }]}
-                    extra={!gstinValue ? 'Needed for the tax invoice receipt and GST bills.' : undefined}>
+                    rules={[{ validator: (_, v) => (!v || GSTIN_RE.test(v) ? Promise.resolve() : Promise.reject(new Error(t('GSTIN should be 15 characters, like 29ABCDE1234F1Z5')))) }]}
+                    extra={!gstinValue ? t('Needed for the tax invoice receipt and GST bills.') : undefined}>
                     <Input maxLength={15} placeholder="29ABCDE1234F1Z5" />
                   </Form.Item>
-                  <Form.Item name="address" label="Address"><Input.TextArea rows={2} /></Form.Item>
+                  <Form.Item name="address" label={t('Address')}><Input.TextArea rows={2} /></Form.Item>
                   <Form.Item
                     name="country"
-                    label="Country & currency"
-                    extra={`Currency: ${getCurrencyInfo(infoForm.getFieldValue('country') || 'India').currency}`}
+                    label={t('Country & currency')}
+                    extra={`${t('Currency')}: ${getCurrencyInfo(infoForm.getFieldValue('country') || 'India').currency}`}
                   >
                     <Select showSearch optionFilterProp="label"
                       options={COUNTRIES.map((c) => ({ value: c.name, label: `${c.name} — ${c.symbol} ${c.currency}` }))} />
                   </Form.Item>
-                  <Button type="primary" htmlType="submit" loading={saving}>Save store info</Button>
+                  <Button type="primary" htmlType="submit" loading={saving}>{t('Save store info')}</Button>
                 </Form>
+                </div>
               ),
             },
             {
@@ -448,21 +476,21 @@ export default function Settings() {
               children: (
                 <div style={{ maxWidth: 560 }}>
                   <Alert type="info" showIcon style={{ marginBottom: 20 }}
-                    message="UPI QR code on receipts and New Bill"
-                    description="Customers scan the QR to pay the exact bill amount — no typing needed." />
+                    message={t('UPI QR code on receipts and New Bill')}
+                    description={t('Customers scan the QR to pay the exact bill amount — no typing needed.')} />
                   <Form form={upiForm} layout="vertical" onFinish={saveUpi}>
-                    <Form.Item name="upi_id" label="UPI ID" extra="Examples: shopname@upi, 9876543210@paytm, name@okaxis"
-                      rules={[{ pattern: /^[\w.-]{2,}@[A-Za-z][\w.-]{1,}$/, message: 'That doesn’t look like a UPI ID (name@bank)' }]}>
+                    <Form.Item name="upi_id" label="UPI ID" extra={`${t('Examples')}: shopname@upi, 9876543210@paytm, name@okaxis`}
+                      rules={[{ pattern: /^[\w.-]{2,}@[A-Za-z][\w.-]{1,}$/, message: t('That doesn’t look like a UPI ID (name@bank)') }]}>
                       <Input placeholder="yourstore@upi" onChange={(e) => setPreviewUpi(e.target.value.trim())} />
                     </Form.Item>
-                    <Button type="primary" htmlType="submit" loading={saving}>Save UPI ID</Button>
+                    <Button type="primary" htmlType="submit" loading={saving}>{t('Save UPI ID')}</Button>
                   </Form>
                   {previewUpi && (
                     <div style={{ textAlign: 'center', marginTop: 20 }}>
                       <div style={{ display: 'inline-block', background: '#fff', padding: 10, borderRadius: 10 }}>
                         <QRCodeSVG size={160} value={`upi://pay?pa=${encodeURIComponent(previewUpi)}&pn=${encodeURIComponent(storeName || '')}&am=100&cu=INR&tn=Demo`} />
                       </div>
-                      <div style={{ fontSize: 12.5, color: SUB, marginTop: 6 }}>Sample QR for {sym}100 — real bills use the exact amount</div>
+                      <div style={{ fontSize: 12.5, color: SUB, marginTop: 6 }}>{t('Sample QR for {amount} — real bills use the exact amount', { amount: `${sym}100` })}</div>
                     </div>
                   )}
                 </div>
@@ -479,13 +507,13 @@ export default function Settings() {
               children: (
                 <div style={{ maxWidth: 560 }}>
                   <Alert type="info" showIcon style={{ marginBottom: 20 }}
-                    message="Payment app shortcut"
-                    description="Choose the app you check payments in. A floating button then opens its dashboard beside the billing app. This choice is saved on this device." />
-                  <div style={{ display: 'grid', gap: 10, marginBottom: 20 }} role="radiogroup" aria-label="Payment app">
-                    {[['gpay', 'GPay Business', 'Opens Google Pay for Business'],
-                      ['phonepe', 'PhonePe Business', 'Opens the PhonePe Business dashboard'],
-                      ['both', 'GPay + PhonePe', 'Opens both side by side'],
-                      ['', 'Off', 'Hide the shortcut button'],
+                    message={t('Payment app shortcut')}
+                    description={t('Choose the app you check payments in. A floating button then opens its dashboard beside the billing app. This choice is saved on this device.')} />
+                  <div style={{ display: 'grid', gap: 10, marginBottom: 20 }} role="radiogroup" aria-label={t('Payment app')}>
+                    {[['gpay', 'GPay Business', t('Opens Google Pay for Business')],
+                      ['phonepe', 'PhonePe Business', t('Opens the PhonePe Business dashboard')],
+                      ['both', 'GPay + PhonePe', t('Opens both side by side')],
+                      ['', t('Off'), t('Hide the shortcut button')],
                     ].map(([val, label, desc]) => {
                       const on = payMonitor === val
                       return (
@@ -493,7 +521,7 @@ export default function Settings() {
                           onClick={() => {
                             setPayMonitor(val)
                             localStorage.setItem('payment_monitor_platform', val)
-                            message.success(val ? `${label} selected` : 'Payment app shortcut turned off')
+                            message.success(val ? t('{name} selected', { name: label }) : t('Payment app shortcut turned off'))
                           }}>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 700, fontSize: 14, color: on ? PRIMARY : TEXT }}>{label}</div>
@@ -505,7 +533,7 @@ export default function Settings() {
                     })}
                   </div>
                   {payMonitor && PLATFORMS[payMonitor] && (
-                    <Button type="primary" onClick={() => openPaymentDashboard(payMonitor)}>Open {PLATFORMS[payMonitor].label} now</Button>
+                    <Button type="primary" onClick={() => openPaymentDashboard(payMonitor)}>{t('Open {name} now', { name: PLATFORMS[payMonitor].label })}</Button>
                   )}
                 </div>
               ),
@@ -516,49 +544,49 @@ export default function Settings() {
               children: (
                 <div style={{ maxWidth: 560 }}>
                   <Alert type="info" showIcon style={{ marginBottom: 20 }}
-                    message="Loyalty rewards"
-                    description={`Customers earn points on every bill and redeem them as a ${sym} discount (1 point = ${sym}1).`} />
+                    message={t('Loyalty rewards')}
+                    description={t('Customers earn points on every bill and redeem them as a {sym} discount (1 point = {sym}1).', { sym })} />
                   <Form
                     form={loyaltyForm}
                     layout="vertical"
                     onFinish={saveLoyalty}
                     initialValues={{ enabled: false, program_name: 'Rewards', rupees_per_point: 100, welcome_bonus: 0, min_redeem_points: 50, max_redeem_percent: 50, terms: '' }}
                   >
-                    <Form.Item name="enabled" label="Loyalty program" valuePropName="checked">
-                      <Switch checkedChildren="On" unCheckedChildren="Off" />
+                    <Form.Item name="enabled" label={t('Loyalty program')} valuePropName="checked">
+                      <Switch checkedChildren={t('On')} unCheckedChildren={t('Off')} />
                     </Form.Item>
                     <fieldset disabled={!loyaltyOn} style={{ border: 'none', padding: 0, margin: 0, opacity: loyaltyOn ? 1 : 0.5 }}>
-                      <Form.Item name="program_name" label="Program name" extra="Shown on the customer's Google Wallet card">
-                        <Input placeholder="e.g. Vera Rewards" disabled={!loyaltyOn} />
+                      <Form.Item name="program_name" label={t('Program name')} extra={t("Shown on the customer's Google Wallet card")}>
+                        <Input placeholder={t('e.g. Vera Rewards')} disabled={!loyaltyOn} />
                       </Form.Item>
-                      <Form.Item name="rupees_per_point" label="Points ratio" extra={`Customers earn 1 point for every ${sym} this much spent.`}>
-                        <InputNumber min={1} max={10000} step={10} style={{ width: 220 }} addonBefore={sym} addonAfter="= 1 point" disabled={!loyaltyOn} />
+                      <Form.Item name="rupees_per_point" label={t('Points ratio')} extra={t('Customers earn 1 point for every {sym} this much spent.', { sym })}>
+                        <InputNumber min={1} max={10000} step={10} style={{ width: 220 }} addonBefore={sym} addonAfter={t('= 1 point')} disabled={!loyaltyOn} />
                       </Form.Item>
-                      <Form.Item name="welcome_bonus" label="Welcome bonus" extra="Points for a new customer (0 to turn off).">
+                      <Form.Item name="welcome_bonus" label={t('Welcome bonus')} extra={t('Points for a new customer (0 to turn off).')}>
                         <InputNumber min={0} max={10000} style={{ width: 220 }} disabled={!loyaltyOn} />
                       </Form.Item>
-                      <Form.Item name="min_redeem_points" label="Minimum points to redeem">
+                      <Form.Item name="min_redeem_points" label={t('Minimum points to redeem')}>
                         <InputNumber min={0} max={100000} style={{ width: 220 }} disabled={!loyaltyOn} />
                       </Form.Item>
-                      <Form.Item name="max_redeem_percent" label="Most of a bill that points can pay" extra="Cap redemption at this % of a single bill.">
+                      <Form.Item name="max_redeem_percent" label={t('Most of a bill that points can pay')} extra={t('Cap redemption at this % of a single bill.')}>
                         <InputNumber min={0} max={100} style={{ width: 220 }} addonAfter="%" disabled={!loyaltyOn} />
                       </Form.Item>
-                      <Form.Item name="terms" label="Terms (optional)">
-                        <Input.TextArea rows={2} placeholder="e.g. Points valid for 1 year, non-transferable" disabled={!loyaltyOn} />
+                      <Form.Item name="terms" label={t('Terms (optional)')}>
+                        <Input.TextArea rows={2} placeholder={t('e.g. Points valid for 1 year, non-transferable')} disabled={!loyaltyOn} />
                       </Form.Item>
                     </fieldset>
-                    <Button type="primary" htmlType="submit" loading={saving}>Save loyalty program</Button>
+                    <Button type="primary" htmlType="submit" loading={saving}>{t('Save loyalty program')}</Button>
                   </Form>
 
                   {loyalty && (
                     <div style={{ marginTop: 20, padding: '12px 14px', background: 'rgba(47,102,144,0.07)', borderRadius: 10, fontSize: 13, color: TEXT }}>
                       <div><strong>Google Wallet:</strong>{' '}
                         {loyalty.wallet_configured
-                          ? <span style={{ color: GOOD, fontWeight: 600 }}>✓ Ready</span>
-                          : <span style={{ color: '#B9770E', fontWeight: 600 }}>Not set up on the server yet</span>}
+                          ? <span style={{ color: GOOD, fontWeight: 600 }}>✓ {t('Ready')}</span>
+                          : <span style={{ color: '#B9770E', fontWeight: 600 }}>{t('Not set up on the server yet')}</span>}
                       </div>
                       <div style={{ marginTop: 4, fontSize: 12.5, color: SUB }}>
-                        Points work fully without Google Wallet. Once Wallet is set up on the server, customers get a Wallet card link on WhatsApp automatically.
+                        {t('Points work fully without Google Wallet. Once Wallet is set up on the server, customers get a Wallet card link on WhatsApp automatically.')}
                       </div>
                     </div>
                   )}

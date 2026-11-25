@@ -30,6 +30,7 @@ class Store(Base):
     plan         = Column(String(20), default="Free")
     upi_id       = Column(String(100), nullable=True)
     country      = Column(String(50), default="India")
+    language     = Column(String(5), default="en")      # app and receipt language (en, hi, mr, …)
     receipt_design      = Column(String(20), default="3inch")
     receipt_footer      = Column(String(120), nullable=True)
     receipt_policy      = Column(String(300), nullable=True)

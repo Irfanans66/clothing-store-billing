@@ -9,6 +9,7 @@ import {
 import { login, registerStore } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { COUNTRIES } from '../utils/currency'
+import { useT, translate, useLangStore, LANGUAGE_OPTIONS } from '../i18n'
 
 const BG      = '#EDE8E2'
 const DARK    = 'rgba(163,155,140,0.55)'
@@ -45,6 +46,7 @@ const CSS = `
 .lb-card { background: ${BG}; border-radius: 26px; box-shadow: ${neu()}; padding: 28px; }
 .lb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .lb-full { grid-column: 1 / -1; }
+.lb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .lb-section { grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: ${SUB};
   text-transform: uppercase; letter-spacing: 0.8px; margin: 4px 0 10px; }
 .lb-input::placeholder { color: #8A837D; opacity: 1; }
@@ -77,12 +79,13 @@ const CSS = `
 
 // ── Labelled field wrapper ───────────────────────────────────────────────────
 function Field({ label, htmlFor, required, optional, children, hint, full }) {
+  const t = useT()
   return (
     <div className={full ? 'lb-full' : undefined} style={{ marginBottom: 14 }}>
       <label htmlFor={htmlFor} style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: TEXT, marginBottom: 6 }}>
         {label}
         {required && <span style={{ color: '#C0392B', marginLeft: 3 }} aria-hidden="true">*</span>}
-        {optional && <span style={{ color: SUB, fontWeight: 400, marginLeft: 4 }}>(optional)</span>}
+        {optional && <span style={{ color: SUB, fontWeight: 400, marginLeft: 4 }}>({t('optional')})</span>}
       </label>
       {children}
       {hint}
@@ -209,15 +212,16 @@ function passwordStrength(pw) {
   if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++
   if (/\d/.test(pw)) score++
   if (/[^A-Za-z0-9]/.test(pw)) score++
-  if (pw.length < 6) return { label: 'Too short — use at least 6 characters', color: '#C0392B', pct: 15 }
-  if (score <= 1) return { label: 'Weak', color: '#C0392B', pct: 33 }
-  if (score <= 3) return { label: 'Medium', color: '#B9770E', pct: 66 }
-  return { label: 'Strong', color: '#1E8449', pct: 100 }
+  if (pw.length < 6) return { label: translate('Too short — use at least 6 characters'), color: '#C0392B', pct: 15 }
+  if (score <= 1) return { label: translate('Weak'), color: '#C0392B', pct: 33 }
+  if (score <= 3) return { label: translate('Medium'), color: '#B9770E', pct: 66 }
+  return { label: translate('Strong'), color: '#1E8449', pct: 100 }
 }
 
 function StrengthHint({ password }) {
+  const t = useT()
   const s = passwordStrength(password)
-  if (!s) return <div style={{ fontSize: 11.5, color: SUB, marginTop: 6 }}>At least 6 characters. Mix letters, numbers and symbols.</div>
+  if (!s) return <div style={{ fontSize: 11.5, color: SUB, marginTop: 6 }}>{t('At least 6 characters. Mix letters, numbers and symbols.')}</div>
   return (
     <div style={{ marginTop: 6 }}>
       <div style={{ height: 4, borderRadius: 2, background: 'rgba(0,0,0,0.08)', overflow: 'hidden' }}>
@@ -240,6 +244,9 @@ const FEATURES = [
 export default function Login() {
   const navigate = useNavigate()
   const setAuth  = useAuthStore((s) => s.setAuth)
+  const t = useT()
+  const lang = useLangStore((s) => s.lang)
+  const setLang = useLangStore((s) => s.setLang)
   const [loading, setLoading] = useState(false)
   const [tab, setTab]         = useState('login')
 
@@ -260,7 +267,7 @@ export default function Login() {
 
   async function handleLogin(e) {
     e.preventDefault()
-    if (!username || !password) { message.warning('Enter username and password'); return }
+    if (!username || !password) { message.warning(t('Enter username and password')); return }
     setLoading(true)
     try {
       const res = await login({ username, password })
@@ -270,6 +277,7 @@ export default function Login() {
       } catch { /* storage unavailable */ }
       localStorage.setItem('token', res.access_token)
       setAuth({ token: res.access_token, role: res.role, storeCode: res.store_code || '', storeName: res.store_name || 'Super Admin', username })
+      if (res.language) setLang(res.language)   // the shop's language follows it to every device
       navigate(res.role === 'SuperAdmin' ? '/super-admin' : '/dashboard')
     } catch (err) { message.error(err.message)
     } finally { setLoading(false) }
@@ -279,20 +287,20 @@ export default function Login() {
     e.preventDefault()
     const required = { store_name: 'Store Name', phone: 'Phone', email: 'Email', address: 'Address', owner_user: 'Username', password: 'Password' }
     const missing = Object.entries(required).find(([f]) => !reg[f].trim())
-    if (missing) { message.warning(`Please enter ${missing[1]}`); return }
+    if (missing) { message.warning(t('Please enter {field}', { field: t(missing[1]) })); return }
     if (!/^[a-z0-9][a-z0-9._-]{2,29}$/i.test(reg.owner_user.trim())) {
-      message.error('Username must be 3–30 characters: letters, numbers, dot, dash or underscore'); return
+      message.error(t('Username must be 3–30 characters: letters, numbers, dot, dash or underscore')); return
     }
     const phoneDigits = reg.phone.replace(/\D/g, '').replace(/^(91(?=\d{10}$)|0(?=\d{10}$))/, '')
     if (reg.country === 'India' ? !/^[6-9]\d{9}$/.test(phoneDigits) : !/^\d{7,15}$/.test(phoneDigits)) {
-      message.error(reg.country === 'India' ? 'Enter a valid 10-digit mobile number' : 'Enter a valid phone number'); return
+      message.error(t(reg.country === 'India' ? 'Enter a valid 10-digit mobile number' : 'Enter a valid phone number')); return
     }
-    if (reg.password !== reg.confirm_password) { message.error('Passwords do not match'); return }
-    if (!agreed) { message.warning('Please accept the Terms of Service and Privacy Policy'); return }
+    if (reg.password !== reg.confirm_password) { message.error(t('Passwords do not match')); return }
+    if (!agreed) { message.warning(t('Please accept the Terms of Service and Privacy Policy')); return }
     setLoading(true)
     try {
-      const res = await registerStore(reg)
-      message.success(res.message)
+      await registerStore({ ...reg, language: lang })
+      message.success(t('Store registered! Log in with your username.'))
       setUsername(reg.owner_user.toLowerCase())
       setTab('login')
     } catch (err) { message.error(err.message)
@@ -328,7 +336,7 @@ export default function Login() {
           Loacal Billing
         </h1>
         <div style={{ fontSize: 13, color: SUB, marginTop: 4, letterSpacing: 0.3 }}>
-          Smart POS for Clothing Stores
+          {t('Smart POS for Clothing Stores')}
         </div>
       </div>
 
@@ -337,16 +345,16 @@ export default function Login() {
         {/* Feature list (desktop only) */}
         <div className="lb-features">
           <h2 style={{ fontSize: 28, lineHeight: 1.25, color: TEXT, margin: '0 0 12px', fontWeight: 800 }}>
-            Billing made simple for clothing & boutique stores
+            {t('Billing made simple for clothing & boutique stores')}
           </h2>
           <p style={{ fontSize: 15, color: SUB, margin: '0 0 24px', lineHeight: 1.6 }}>
-            Create bills, manage stock and accept payments — all from one app.
+            {t('Create bills, manage stock and accept payments — all from one app.')}
           </p>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {FEATURES.map(f => (
               <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 15, color: TEXT, marginBottom: 14 }}>
                 <CheckCircleFilled style={{ color: PRIMARY, fontSize: 18 }} />
-                {f}
+                {t(f)}
               </li>
             ))}
           </ul>
@@ -355,6 +363,17 @@ export default function Login() {
         <div>
           {/* Card */}
           <div className="lb-card">
+            {/* Language first, so everything below is in the shopkeeper's language */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <label htmlFor="lb-lang" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: SUB }}>
+                <GlobalOutlined aria-hidden="true" />
+                <span className="lb-sr">{t('Language')}</span>
+                <select id="lb-lang" value={lang} onChange={(e) => setLang(e.target.value)}
+                  style={{ border: 'none', background: 'transparent', fontSize: 13, color: TEXT, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {LANGUAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </label>
+            </div>
 
             {/* Tab switcher */}
             <div role="tablist" style={{
@@ -372,58 +391,62 @@ export default function Login() {
                   boxShadow: tab === k ? `3px 3px 10px rgba(0,0,0,0.15), -2px -2px 6px rgba(255,255,255,0.5)` : 'none',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   transition: 'all 0.2s',
-                }}>{icon}{label}</button>
+                }}>{icon}{t(label)}</button>
               ))}
             </div>
 
             {tab === 'login' ? (
               <form onSubmit={handleLogin} noValidate>
-                <Field label="Username" htmlFor="username">
-                  <NeuInput icon={<UserOutlined />} placeholder="Enter your username" value={username}
+                <Field label={t('Username')} htmlFor="username">
+                  <NeuInput icon={<UserOutlined />} placeholder={t('Enter your username')} value={username}
                     onChange={e => setUsername(e.target.value)} id="username" autoComplete="username" />
                 </Field>
-                <Field label="Password" htmlFor="password">
-                  <NeuInput icon={<LockOutlined />} placeholder="Enter your password" type="password" value={password}
+                <Field label={t('Password')} htmlFor="password">
+                  <NeuInput icon={<LockOutlined />} placeholder={t('Enter your password')} type="password" value={password}
                     onChange={e => setPassword(e.target.value)} id="password" autoComplete="current-password" />
                 </Field>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '2px 0 18px', gap: 12, flexWrap: 'wrap' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: TEXT, cursor: 'pointer', minHeight: 32 }}>
                     <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
                       style={{ width: 16, height: 16, accentColor: PRIMARY }} />
-                    Remember me
+                    {t('Remember me')}
                   </label>
                   <a href={forgotHref} target="_blank" rel="noopener noreferrer"
                     style={{ fontSize: 13, color: PRIMARY, fontWeight: 600, textDecoration: 'none', minHeight: 32, display: 'flex', alignItems: 'center' }}>
-                    Forgot password?
+                    {t('Forgot password?')}
                   </a>
                 </div>
-                <NeuButton loading={loading}>Login</NeuButton>
+                <NeuButton loading={loading}>{t('Login')}</NeuButton>
               </form>
             ) : (
               <form onSubmit={handleRegister} noValidate>
                 <div className="lb-grid">
-                  <div className="lb-section">Store details</div>
-                  <Field label="Store Name" htmlFor="reg-store" required>
-                    <NeuInput id="reg-store" icon={<ShopOutlined />} placeholder="e.g. Sharma Garments"
+                  <div className="lb-section">{t('Store details')}</div>
+                  <Field label={t('Language for the app and receipts')} htmlFor="reg-language" required full>
+                    <NeuSelect id="reg-language" icon={<GlobalOutlined />} value={lang}
+                      onChange={(e) => setLang(e.target.value)} options={LANGUAGE_OPTIONS} />
+                  </Field>
+                  <Field label={t('Store Name')} htmlFor="reg-store" required>
+                    <NeuInput id="reg-store" icon={<ShopOutlined />} placeholder={t('e.g. Sharma Garments')}
                       value={reg.store_name} onChange={r('store_name')} autoComplete="organization" required />
                   </Field>
-                  <Field label="Phone" htmlFor="reg-phone" required>
+                  <Field label={t('Phone')} htmlFor="reg-phone" required>
                     <NeuInput id="reg-phone" icon={<PhoneOutlined />} prefix={dialCode} type="tel" placeholder="98765 43210"
                       value={reg.phone} onChange={r('phone')} autoComplete="tel-national" required />
                   </Field>
-                  <Field label="Email" htmlFor="reg-email" required full>
+                  <Field label={t('Email')} htmlFor="reg-email" required full>
                     <NeuInput id="reg-email" icon={<MailOutlined />} type="email" placeholder="you@example.com"
                       value={reg.email} onChange={r('email')} autoComplete="email" required />
                   </Field>
-                  <Field label="Address" htmlFor="reg-address" required full>
-                    <NeuInput id="reg-address" icon={<EnvironmentOutlined />} placeholder="Shop address"
+                  <Field label={t('Address')} htmlFor="reg-address" required full>
+                    <NeuInput id="reg-address" icon={<EnvironmentOutlined />} placeholder={t('Shop address')}
                       value={reg.address} onChange={r('address')} autoComplete="street-address" required />
                   </Field>
                   <Field label="GSTIN" htmlFor="reg-gstin" optional>
                     <NeuInput id="reg-gstin" icon={<BankOutlined />} placeholder="22AAAAA0000A1Z5"
                       value={reg.gstin} onChange={r('gstin')} />
                   </Field>
-                  <Field label="Country" htmlFor="reg-country" required>
+                  <Field label={t('Country')} htmlFor="reg-country" required>
                     <NeuSelect
                       id="reg-country"
                       icon={<GlobalOutlined />}
@@ -433,20 +456,20 @@ export default function Login() {
                     />
                   </Field>
 
-                  <div className="lb-section" style={{ marginTop: 8 }}>Your account</div>
-                  <Field label="Username" htmlFor="reg-user" required full>
-                    <NeuInput id="reg-user" icon={<UserOutlined />} placeholder="No spaces, used to log in"
+                  <div className="lb-section" style={{ marginTop: 8 }}>{t('Your account')}</div>
+                  <Field label={t('Username')} htmlFor="reg-user" required full>
+                    <NeuInput id="reg-user" icon={<UserOutlined />} placeholder={t('No spaces, used to log in')}
                       value={reg.owner_user} onChange={r('owner_user')} autoComplete="username" required />
                   </Field>
-                  <Field label="Password" htmlFor="reg-pass" required hint={<StrengthHint password={reg.password} />}>
-                    <NeuInput id="reg-pass" icon={<LockOutlined />} type="password" placeholder="Create a password"
+                  <Field label={t('Password')} htmlFor="reg-pass" required hint={<StrengthHint password={reg.password} />}>
+                    <NeuInput id="reg-pass" icon={<LockOutlined />} type="password" placeholder={t('Create a password')}
                       value={reg.password} onChange={r('password')} autoComplete="new-password" required />
                   </Field>
-                  <Field label="Confirm Password" htmlFor="reg-pass2" required
+                  <Field label={t('Confirm Password')} htmlFor="reg-pass2" required
                     hint={reg.confirm_password && reg.confirm_password !== reg.password
-                      ? <div style={{ fontSize: 11.5, color: '#C0392B', marginTop: 6, fontWeight: 600 }}>Passwords do not match</div>
+                      ? <div style={{ fontSize: 11.5, color: '#C0392B', marginTop: 6, fontWeight: 600 }}>{t('Passwords do not match')}</div>
                       : null}>
-                    <NeuInput id="reg-pass2" icon={<LockOutlined />} type="password" placeholder="Re-enter password"
+                    <NeuInput id="reg-pass2" icon={<LockOutlined />} type="password" placeholder={t('Re-enter password')}
                       value={reg.confirm_password} onChange={r('confirm_password')} autoComplete="new-password" required />
                   </Field>
                 </div>
@@ -455,14 +478,14 @@ export default function Login() {
                   <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)}
                     style={{ width: 16, height: 16, marginTop: 3, accentColor: PRIMARY, flexShrink: 0 }} />
                   <span>
-                    I agree to the{' '}
-                    <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: PRIMARY, fontWeight: 600 }}>Terms of Service</a>
-                    {' '}and{' '}
-                    <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: PRIMARY, fontWeight: 600 }}>Privacy Policy</a>
+                    {t('I agree to the')}{' '}
+                    <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: PRIMARY, fontWeight: 600 }}>{t('Terms of Service')}</a>
+                    {' '}{t('and')}{' '}
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: PRIMARY, fontWeight: 600 }}>{t('Privacy Policy')}</a>
                   </span>
                 </label>
 
-                <NeuButton loading={loading}>Register Store</NeuButton>
+                <NeuButton loading={loading}>{t('Register Store')}</NeuButton>
               </form>
             )}
           </div>
